@@ -1,0 +1,8 @@
+[package]
+name = "lc3-parser"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+chumsky = "0.12"
+ariadne = "0.6"

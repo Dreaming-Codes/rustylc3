@@ -1,0 +1,13 @@
+[package]
+name = "lc3-cli"
+version = "0.1.0"
+edition = "2024"
+
+[[bin]]
+name = "lc3"
+path = "src/main.rs"
+
+[dependencies]
+lc3-core = { path = "../lc3-core" }
+lc3-assembler = { path = "../lc3-assembler" }
+clap = { version = "4", features = ["derive"] }
