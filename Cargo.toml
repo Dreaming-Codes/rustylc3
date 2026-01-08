@@ -1,3 +1,8 @@
 [workspace]
 resolver = "2"
 members = ["lc3-core", "lc3-parser", "lc3-assembler", "lc3-cli"]
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
