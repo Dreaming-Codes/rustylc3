@@ -4,7 +4,6 @@ import {
   Play,
   Pause,
   SkipForward,
-  FastForward,
   RotateCcw,
   Zap,
 } from 'lucide-react'
@@ -17,7 +16,6 @@ import {
   step,
   setStepSpeed,
   getCurrentLine,
-  runToLine,
 } from '@/lib/lc3-store'
 import { Button } from '@/components/ui/button'
 import { Slider } from '@/components/ui/slider'
@@ -63,17 +61,6 @@ export function ControlPanel() {
 
   const handleSpeedChange = useCallback((values: number[]) => {
     setStepSpeed(values[0])
-  }, [])
-
-  const handleRunToLine = useCallback(() => {
-    // Get cursor position from editor and run to that line
-    const line = prompt('Enter line number to run to:')
-    if (line) {
-      const lineNum = parseInt(line, 10)
-      if (!isNaN(lineNum)) {
-        runToLine(lineNum)
-      }
-    }
   }, [])
 
   // Status badge
@@ -176,22 +163,6 @@ export function ControlPanel() {
                 </Button>
               </TooltipTrigger>
               <TooltipContent>Execute single instruction</TooltipContent>
-            </Tooltip>
-
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={handleRunToLine}
-                  disabled={!wasmReady || !isAssembled || isRunning || isHalted}
-                  className="gap-1.5"
-                >
-                  <FastForward className="h-4 w-4" />
-                  Run To
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Run until specified line</TooltipContent>
             </Tooltip>
 
             <Tooltip>

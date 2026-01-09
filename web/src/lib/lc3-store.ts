@@ -351,39 +351,6 @@ export function stop() {
   }))
 }
 
-export function runToLine(targetLine: number) {
-  if (!vm) return
-
-  const state = lc3Store.state
-  const targetPC = state.lineToPC.get(targetLine)
-
-  if (targetPC === undefined) {
-    lc3Store.setState((s) => ({
-      ...s,
-      consoleOutput: s.consoleOutput + `No executable code at line ${targetLine}\n`,
-    }))
-    return
-  }
-
-  lc3Store.setState((s) => ({ ...s, isRunning: true }))
-
-  const runStep = () => {
-    if (!vm) return
-
-    const currentPC = vm.pc()
-    if (currentPC === targetPC || lc3Store.state.isHalted || !lc3Store.state.isRunning) {
-      lc3Store.setState((s) => ({ ...s, isRunning: false }))
-      return
-    }
-
-    if (step()) {
-      setTimeout(runStep, 0)
-    }
-  }
-
-  runStep()
-}
-
 export function provideInput(char: string) {
   if (!vm || !lc3Store.state.waitingForInput) return
 
@@ -425,6 +392,10 @@ export function toggleBreakpoint(line: number) {
 function startAutoRun() {
   if (autoRunInterval) return
 
+  // Track the starting PC to skip the breakpoint we're currently on
+  const startingPC = lc3Store.state.pc
+  let isFirstTick = true
+
   const runTick = () => {
     const state = lc3Store.state
     if (!state.isRunning || state.isHalted || state.waitingForInput) {
@@ -432,13 +403,17 @@ function startAutoRun() {
       return
     }
 
-    // Check for breakpoint
+    // Check for breakpoint (but skip if we're still on the starting breakpoint)
     const currentLine = state.pcToLine.get(state.pc)
     if (currentLine && state.breakpoints.has(currentLine)) {
-      pause()
-      return
+      // Only pause if we've moved past the starting point
+      if (!isFirstTick || state.pc !== startingPC) {
+        pause()
+        return
+      }
     }
 
+    isFirstTick = false
     step()
   }
 
