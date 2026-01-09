@@ -126,7 +126,14 @@ export async function initWasm() {
   return initPromise
 }
 
-export function updateSourceCode(code: string) {
+// Callback for when source code changes (used by file manager)
+let onSourceCodeChangeCallback: (() => void) | null = null
+
+export function setOnSourceCodeChange(callback: (() => void) | null) {
+  onSourceCodeChangeCallback = callback
+}
+
+export function updateSourceCode(code: string, markAsChanged = true) {
   if (!wasmModule) return
 
   // Use stateless analysis function - no stored state, no borrow conflicts
@@ -137,6 +144,11 @@ export function updateSourceCode(code: string) {
     sourceCode: code,
     diagnostics,
   }))
+
+  // Notify file manager of changes
+  if (markAsChanged && onSourceCodeChangeCallback) {
+    onSourceCodeChangeCallback()
+  }
 }
 
 export function assemble(): boolean {

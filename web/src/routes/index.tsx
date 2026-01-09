@@ -12,7 +12,9 @@ import { RegistersPanel } from '@/components/RegistersPanel'
 import { ControlPanel } from '@/components/ControlPanel'
 import { ConsolePanel } from '@/components/ConsolePanel'
 import { MemoryPanel } from '@/components/MemoryPanel'
+import { FileToolbar } from '@/components/FileToolbar'
 import { initWasm } from '@/lib/lc3-store'
+import { initFileManager, saveCurrentFile } from '@/lib/file-manager'
 import { Button } from '@/components/ui/button'
 
 export const Route = createFileRoute('/')({
@@ -20,9 +22,23 @@ export const Route = createFileRoute('/')({
 })
 
 function IDE() {
-  // Initialize WASM on mount
+  // Initialize WASM and file manager on mount
   useEffect(() => {
     initWasm()
+    initFileManager()
+  }, [])
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        e.preventDefault()
+        saveCurrentFile()
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
   }, [])
 
   return (
@@ -36,6 +52,8 @@ function IDE() {
               LC-3 <span className="text-blue-400">IDE</span>
             </h1>
           </div>
+          <div className="h-4 w-px bg-zinc-700" />
+          <FileToolbar />
         </div>
         <div className="flex items-center gap-2">
           <Button
