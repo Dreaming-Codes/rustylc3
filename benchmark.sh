@@ -112,8 +112,9 @@ for bench in "${BENCHMARKS[@]}"; do
     # Check if lc3sim .obj file exists
     if [ -f "$OBJ_FILE" ]; then
         hyperfine \
-            --warmup 3 \
-            --min-runs 20 \
+            --warmup 10 \
+            --min-runs 50 \
+            --prepare 'sync' \
             -N \
             --export-json "$RESULTS_DIR/${bench}.json" \
             --export-markdown "$RESULTS_DIR/${bench}.md" \
@@ -122,8 +123,9 @@ for bench in "${BENCHMARKS[@]}"; do
     else
         echo -e "${YELLOW}Note: Only benchmarking rustylc3 (lc3sim .obj not available)${NC}"
         hyperfine \
-            --warmup 3 \
-            --min-runs 20 \
+            --warmup 10 \
+            --min-runs 50 \
+            --prepare 'sync' \
             -N \
             --export-json "$RESULTS_DIR/${bench}.json" \
             --export-markdown "$RESULTS_DIR/${bench}.md" \

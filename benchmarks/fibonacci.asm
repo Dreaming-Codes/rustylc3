@@ -18,6 +18,6 @@ FIB_LOOP
 
     HALT
 
-COUNT .FILL #1000       ; Calculate 1000 iterations
+COUNT .FILL #10000      ; Calculate 10000 iterations
 
 .END

@@ -1,9 +1,13 @@
 ; Bubble Sort implementation
-; Sorts an array of 20 numbers
+; Sorts an array of 20 numbers repeatedly
 ; Tests: nested loops, memory access, comparisons
 
 .ORIG x3000
 
+    LD R6, REPEAT_COUNT ; Number of times to repeat sorting
+
+REPEAT_LOOP
+    ; Reset array to unsorted state each iteration
     LEA R0, ARRAY       ; R0 = pointer to array
     LD R1, SIZE         ; R1 = array size
     ADD R1, R1, #-1     ; R1 = size - 1 (outer loop count)
@@ -34,8 +38,12 @@ NO_SWAP
     ADD R1, R1, #-1     ; decrement outer counter
     BRp OUTER_LOOP
 
+    ADD R6, R6, #-1     ; decrement repeat counter
+    BRp REPEAT_LOOP
+
     HALT
 
+REPEAT_COUNT .FILL #100
 SIZE .FILL #20
 
 ARRAY
