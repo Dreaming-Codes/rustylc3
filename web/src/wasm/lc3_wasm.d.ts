@@ -1,83 +1,6 @@
 /* tslint:disable */
 /* eslint-disable */
 
-export class LC3Language {
-  free(): void;
-  [Symbol.dispose](): void;
-  /**
-   * Get semantic tokens for syntax highlighting.
-   *
-   * Returns an array of token objects with:
-   * - line: number (1-based)
-   * - startColumn: number (1-based)
-   * - length: number
-   * - tokenType: "keyword" | "label" | "labelRef" | "register" | "number" | "string" | "comment" | "directive" | "operator"
-   */
-  get_tokens(): any;
-  /**
-   * Get all symbols (labels) in the document.
-   *
-   * Returns an array of symbol objects with:
-   * - name: string
-   * - kind: "label" | "subroutine" | "data"
-   * - address: hex string (e.g., "x3000")
-   * - range: { startLineNumber, startColumn, endLineNumber, endColumn }
-   */
-  get_symbols(): any;
-  /**
-   * Get definition location for a position.
-   *
-   * Returns null if no definition found, or an object with:
-   * - startLineNumber, startColumn, endLineNumber, endColumn
-   */
-  get_definition(line: number, column: number): any;
-  /**
-   * Get all references to the symbol at position.
-   *
-   * Returns an array of range objects.
-   */
-  get_references(line: number, column: number): any;
-  /**
-   * Get completion suggestions for a position.
-   *
-   * Returns an array of completion items with:
-   * - label: string
-   * - kind: "label" | "keyword" | "snippet"
-   * - detail: optional string
-   * - documentation: optional string
-   * - insertText: optional string
-   */
-  get_completions(line: number, column: number): any;
-  /**
-   * Get all diagnostics (errors/warnings) for the document.
-   *
-   * Returns an array of diagnostic objects with:
-   * - message: string
-   * - severity: "error" | "warning" | "info" | "hint"
-   * - startLineNumber: number (1-based)
-   * - startColumn: number (1-based)
-   * - endLineNumber: number (1-based)
-   * - endColumn: number (1-based)
-   */
-  get_diagnostics(): any;
-  /**
-   * Create a new language analysis instance.
-   */
-  constructor();
-  /**
-   * Update the document with new source code.
-   * Call this whenever the editor content changes.
-   */
-  update(source: string): void;
-  /**
-   * Get hover information for a position.
-   *
-   * Returns null if no hover info, or an object with:
-   * - contents: markdown string
-   */
-  get_hover(line: number, column: number): any;
-}
-
 export class WasmLC3 {
   free(): void;
   [Symbol.dispose](): void;
@@ -170,6 +93,83 @@ export class WasmLC3 {
 }
 
 /**
+ * Get completion suggestions for a position.
+ * This is a stateless function.
+ *
+ * Returns an array of completion items with:
+ * - label: string
+ * - kind: "label" | "keyword" | "snippet"
+ * - detail: optional string
+ * - documentation: optional string
+ * - insertText: optional string
+ */
+export function analyze_completions(source: string, line: number, column: number): any;
+
+/**
+ * Get definition location for a position in the source code.
+ * This is a stateless function.
+ *
+ * Returns null if no definition found, or an object with:
+ * - startLineNumber, startColumn, endLineNumber, endColumn
+ */
+export function analyze_definition(source: string, line: number, column: number): any;
+
+/**
+ * Analyze source code and return diagnostics.
+ * This is a stateless function that creates a fresh analysis each time.
+ *
+ * Returns an array of diagnostic objects with:
+ * - message: string
+ * - severity: "error" | "warning" | "info" | "hint"
+ * - startLineNumber: number (1-based)
+ * - startColumn: number (1-based)
+ * - endLineNumber: number (1-based)
+ * - endColumn: number (1-based)
+ */
+export function analyze_diagnostics(source: string): any;
+
+/**
+ * Get hover information for a position.
+ * This is a stateless function.
+ *
+ * Returns null if no hover info, or an object with:
+ * - contents: markdown string
+ */
+export function analyze_hover(source: string, line: number, column: number): any;
+
+/**
+ * Get all references to the symbol at position.
+ * This is a stateless function.
+ *
+ * Returns an array of range objects.
+ */
+export function analyze_references(source: string, line: number, column: number): any;
+
+/**
+ * Get all symbols (labels) in the document.
+ * This is a stateless function.
+ *
+ * Returns an array of symbol objects with:
+ * - name: string
+ * - kind: "label" | "subroutine" | "data"
+ * - address: hex string (e.g., "x3000")
+ * - range: { startLineNumber, startColumn, endLineNumber, endColumn }
+ */
+export function analyze_symbols(source: string): any;
+
+/**
+ * Get semantic tokens for syntax highlighting.
+ * This is a stateless function.
+ *
+ * Returns an array of token objects with:
+ * - line: number (1-based)
+ * - startColumn: number (1-based)
+ * - length: number
+ * - tokenType: "keyword" | "label" | "labelRef" | "register" | "number" | "string" | "comment" | "directive" | "operator"
+ */
+export function analyze_tokens(source: string): any;
+
+/**
  * Assemble LC-3 source code into machine code.
  *
  * Returns an object with:
@@ -196,20 +196,16 @@ export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembl
 
 export interface InitOutput {
   readonly memory: WebAssembly.Memory;
-  readonly __wbg_lc3language_free: (a: number, b: number) => void;
   readonly __wbg_wasmlc3_free: (a: number, b: number) => void;
+  readonly analyze_completions: (a: number, b: number, c: number, d: number) => any;
+  readonly analyze_definition: (a: number, b: number, c: number, d: number) => any;
+  readonly analyze_diagnostics: (a: number, b: number) => any;
+  readonly analyze_hover: (a: number, b: number, c: number, d: number) => any;
+  readonly analyze_references: (a: number, b: number, c: number, d: number) => any;
+  readonly analyze_symbols: (a: number, b: number) => any;
+  readonly analyze_tokens: (a: number, b: number) => any;
   readonly assemble: (a: number, b: number) => any;
   readonly assemble_to_bytes: (a: number, b: number, c: number) => [number, number, number, number];
-  readonly init: () => void;
-  readonly lc3language_get_completions: (a: number, b: number, c: number) => any;
-  readonly lc3language_get_definition: (a: number, b: number, c: number) => any;
-  readonly lc3language_get_diagnostics: (a: number) => any;
-  readonly lc3language_get_hover: (a: number, b: number, c: number) => any;
-  readonly lc3language_get_references: (a: number, b: number, c: number) => any;
-  readonly lc3language_get_symbols: (a: number) => any;
-  readonly lc3language_get_tokens: (a: number) => any;
-  readonly lc3language_new: () => number;
-  readonly lc3language_update: (a: number, b: number, c: number) => void;
   readonly wasmlc3_cond_str: (a: number) => [number, number];
   readonly wasmlc3_load: (a: number, b: number, c: number, d: number) => void;
   readonly wasmlc3_load_bytes: (a: number, b: number, c: number) => [number, number];
@@ -229,11 +225,12 @@ export interface InitOutput {
   readonly wasmlc3_set_reg: (a: number, b: number, c: number) => void;
   readonly wasmlc3_step: (a: number) => any;
   readonly wasmlc3_z: (a: number) => number;
-  readonly __wbindgen_externrefs: WebAssembly.Table;
+  readonly init: () => void;
+  readonly __wbindgen_free: (a: number, b: number, c: number) => void;
   readonly __wbindgen_malloc: (a: number, b: number) => number;
   readonly __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;
+  readonly __wbindgen_externrefs: WebAssembly.Table;
   readonly __externref_table_dealloc: (a: number) => void;
-  readonly __wbindgen_free: (a: number, b: number, c: number) => void;
   readonly __wbindgen_start: () => void;
 }
 

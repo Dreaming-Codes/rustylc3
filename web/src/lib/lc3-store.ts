@@ -95,8 +95,6 @@ export const lc3Store = new Store<LC3State>({
 // WASM module references (initialized lazily)
 let wasmModule: typeof import('@/wasm/lc3_wasm') | null = null
 let vm: InstanceType<typeof import('@/wasm/lc3_wasm').WasmLC3> | null = null
-let language: InstanceType<typeof import('@/wasm/lc3_wasm').LC3Language> | null =
-  null
 
 // Auto-run interval
 let autoRunInterval: ReturnType<typeof setInterval> | null = null
@@ -109,7 +107,6 @@ export async function initWasm() {
 
   wasmModule = wasm
   vm = new wasm.WasmLC3()
-  language = new wasm.LC3Language()
 
   lc3Store.setState((s) => ({ ...s, wasmReady: true }))
 
@@ -118,10 +115,10 @@ export async function initWasm() {
 }
 
 export function updateSourceCode(code: string) {
-  if (!language) return
+  if (!wasmModule) return
 
-  language.update(code)
-  const diagnostics = language.get_diagnostics() as Diagnostic[]
+  // Use stateless analysis function - no stored state, no borrow conflicts
+  const diagnostics = wasmModule.analyze_diagnostics(code) as Diagnostic[]
 
   lc3Store.setState((s) => ({
     ...s,

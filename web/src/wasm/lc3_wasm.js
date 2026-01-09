@@ -10,6 +10,14 @@ function getArrayU8FromWasm0(ptr, len) {
     return getUint8ArrayMemory0().subarray(ptr / 1, ptr / 1 + len);
 }
 
+let cachedDataViewMemory0 = null;
+function getDataViewMemory0() {
+    if (cachedDataViewMemory0 === null || cachedDataViewMemory0.buffer.detached === true || (cachedDataViewMemory0.buffer.detached === undefined && cachedDataViewMemory0.buffer !== wasm.memory.buffer)) {
+        cachedDataViewMemory0 = new DataView(wasm.memory.buffer);
+    }
+    return cachedDataViewMemory0;
+}
+
 function getStringFromWasm0(ptr, len) {
     ptr = ptr >>> 0;
     return decodeText(ptr, len);
@@ -117,155 +125,9 @@ if (!('encodeInto' in cachedTextEncoder)) {
 
 let WASM_VECTOR_LEN = 0;
 
-const LC3LanguageFinalization = (typeof FinalizationRegistry === 'undefined')
-    ? { register: () => {}, unregister: () => {} }
-    : new FinalizationRegistry(ptr => wasm.__wbg_lc3language_free(ptr >>> 0, 1));
-
 const WasmLC3Finalization = (typeof FinalizationRegistry === 'undefined')
     ? { register: () => {}, unregister: () => {} }
     : new FinalizationRegistry(ptr => wasm.__wbg_wasmlc3_free(ptr >>> 0, 1));
-
-/**
- * LC-3 Language Analysis for Monaco Editor integration.
- *
- * This class provides IDE-like features for LC-3 assembly:
- * - Diagnostics (error markers)
- * - Go to definition
- * - Find all references
- * - Hover information
- * - Code completions
- */
-export class LC3Language {
-    __destroy_into_raw() {
-        const ptr = this.__wbg_ptr;
-        this.__wbg_ptr = 0;
-        LC3LanguageFinalization.unregister(this);
-        return ptr;
-    }
-    free() {
-        const ptr = this.__destroy_into_raw();
-        wasm.__wbg_lc3language_free(ptr, 0);
-    }
-    /**
-     * Get semantic tokens for syntax highlighting.
-     *
-     * Returns an array of token objects with:
-     * - line: number (1-based)
-     * - startColumn: number (1-based)
-     * - length: number
-     * - tokenType: "keyword" | "label" | "labelRef" | "register" | "number" | "string" | "comment" | "directive" | "operator"
-     * @returns {any}
-     */
-    get_tokens() {
-        const ret = wasm.lc3language_get_tokens(this.__wbg_ptr);
-        return ret;
-    }
-    /**
-     * Get all symbols (labels) in the document.
-     *
-     * Returns an array of symbol objects with:
-     * - name: string
-     * - kind: "label" | "subroutine" | "data"
-     * - address: hex string (e.g., "x3000")
-     * - range: { startLineNumber, startColumn, endLineNumber, endColumn }
-     * @returns {any}
-     */
-    get_symbols() {
-        const ret = wasm.lc3language_get_symbols(this.__wbg_ptr);
-        return ret;
-    }
-    /**
-     * Get definition location for a position.
-     *
-     * Returns null if no definition found, or an object with:
-     * - startLineNumber, startColumn, endLineNumber, endColumn
-     * @param {number} line
-     * @param {number} column
-     * @returns {any}
-     */
-    get_definition(line, column) {
-        const ret = wasm.lc3language_get_definition(this.__wbg_ptr, line, column);
-        return ret;
-    }
-    /**
-     * Get all references to the symbol at position.
-     *
-     * Returns an array of range objects.
-     * @param {number} line
-     * @param {number} column
-     * @returns {any}
-     */
-    get_references(line, column) {
-        const ret = wasm.lc3language_get_references(this.__wbg_ptr, line, column);
-        return ret;
-    }
-    /**
-     * Get completion suggestions for a position.
-     *
-     * Returns an array of completion items with:
-     * - label: string
-     * - kind: "label" | "keyword" | "snippet"
-     * - detail: optional string
-     * - documentation: optional string
-     * - insertText: optional string
-     * @param {number} line
-     * @param {number} column
-     * @returns {any}
-     */
-    get_completions(line, column) {
-        const ret = wasm.lc3language_get_completions(this.__wbg_ptr, line, column);
-        return ret;
-    }
-    /**
-     * Get all diagnostics (errors/warnings) for the document.
-     *
-     * Returns an array of diagnostic objects with:
-     * - message: string
-     * - severity: "error" | "warning" | "info" | "hint"
-     * - startLineNumber: number (1-based)
-     * - startColumn: number (1-based)
-     * - endLineNumber: number (1-based)
-     * - endColumn: number (1-based)
-     * @returns {any}
-     */
-    get_diagnostics() {
-        const ret = wasm.lc3language_get_diagnostics(this.__wbg_ptr);
-        return ret;
-    }
-    /**
-     * Create a new language analysis instance.
-     */
-    constructor() {
-        const ret = wasm.lc3language_new();
-        this.__wbg_ptr = ret >>> 0;
-        LC3LanguageFinalization.register(this, this.__wbg_ptr, this);
-        return this;
-    }
-    /**
-     * Update the document with new source code.
-     * Call this whenever the editor content changes.
-     * @param {string} source
-     */
-    update(source) {
-        const ptr0 = passStringToWasm0(source, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-        const len0 = WASM_VECTOR_LEN;
-        wasm.lc3language_update(this.__wbg_ptr, ptr0, len0);
-    }
-    /**
-     * Get hover information for a position.
-     *
-     * Returns null if no hover info, or an object with:
-     * - contents: markdown string
-     * @param {number} line
-     * @param {number} column
-     * @returns {any}
-     */
-    get_hover(line, column) {
-        const ret = wasm.lc3language_get_hover(this.__wbg_ptr, line, column);
-        return ret;
-    }
-}
-if (Symbol.dispose) LC3Language.prototype[Symbol.dispose] = LC3Language.prototype.free;
 
 /**
  * LC-3 Virtual Machine WASM wrapper.
@@ -466,6 +328,140 @@ export class WasmLC3 {
 if (Symbol.dispose) WasmLC3.prototype[Symbol.dispose] = WasmLC3.prototype.free;
 
 /**
+ * Get completion suggestions for a position.
+ * This is a stateless function.
+ *
+ * Returns an array of completion items with:
+ * - label: string
+ * - kind: "label" | "keyword" | "snippet"
+ * - detail: optional string
+ * - documentation: optional string
+ * - insertText: optional string
+ * @param {string} source
+ * @param {number} line
+ * @param {number} column
+ * @returns {any}
+ */
+export function analyze_completions(source, line, column) {
+    const ptr0 = passStringToWasm0(source, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.analyze_completions(ptr0, len0, line, column);
+    return ret;
+}
+
+/**
+ * Get definition location for a position in the source code.
+ * This is a stateless function.
+ *
+ * Returns null if no definition found, or an object with:
+ * - startLineNumber, startColumn, endLineNumber, endColumn
+ * @param {string} source
+ * @param {number} line
+ * @param {number} column
+ * @returns {any}
+ */
+export function analyze_definition(source, line, column) {
+    const ptr0 = passStringToWasm0(source, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.analyze_definition(ptr0, len0, line, column);
+    return ret;
+}
+
+/**
+ * Analyze source code and return diagnostics.
+ * This is a stateless function that creates a fresh analysis each time.
+ *
+ * Returns an array of diagnostic objects with:
+ * - message: string
+ * - severity: "error" | "warning" | "info" | "hint"
+ * - startLineNumber: number (1-based)
+ * - startColumn: number (1-based)
+ * - endLineNumber: number (1-based)
+ * - endColumn: number (1-based)
+ * @param {string} source
+ * @returns {any}
+ */
+export function analyze_diagnostics(source) {
+    const ptr0 = passStringToWasm0(source, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.analyze_diagnostics(ptr0, len0);
+    return ret;
+}
+
+/**
+ * Get hover information for a position.
+ * This is a stateless function.
+ *
+ * Returns null if no hover info, or an object with:
+ * - contents: markdown string
+ * @param {string} source
+ * @param {number} line
+ * @param {number} column
+ * @returns {any}
+ */
+export function analyze_hover(source, line, column) {
+    const ptr0 = passStringToWasm0(source, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.analyze_hover(ptr0, len0, line, column);
+    return ret;
+}
+
+/**
+ * Get all references to the symbol at position.
+ * This is a stateless function.
+ *
+ * Returns an array of range objects.
+ * @param {string} source
+ * @param {number} line
+ * @param {number} column
+ * @returns {any}
+ */
+export function analyze_references(source, line, column) {
+    const ptr0 = passStringToWasm0(source, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.analyze_references(ptr0, len0, line, column);
+    return ret;
+}
+
+/**
+ * Get all symbols (labels) in the document.
+ * This is a stateless function.
+ *
+ * Returns an array of symbol objects with:
+ * - name: string
+ * - kind: "label" | "subroutine" | "data"
+ * - address: hex string (e.g., "x3000")
+ * - range: { startLineNumber, startColumn, endLineNumber, endColumn }
+ * @param {string} source
+ * @returns {any}
+ */
+export function analyze_symbols(source) {
+    const ptr0 = passStringToWasm0(source, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.analyze_symbols(ptr0, len0);
+    return ret;
+}
+
+/**
+ * Get semantic tokens for syntax highlighting.
+ * This is a stateless function.
+ *
+ * Returns an array of token objects with:
+ * - line: number (1-based)
+ * - startColumn: number (1-based)
+ * - length: number
+ * - tokenType: "keyword" | "label" | "labelRef" | "register" | "number" | "string" | "comment" | "directive" | "operator"
+ * @param {string} source
+ * @returns {any}
+ */
+export function analyze_tokens(source) {
+    const ptr0 = passStringToWasm0(source, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.analyze_tokens(ptr0, len0);
+    return ret;
+}
+
+/**
  * Assemble LC-3 source code into machine code.
  *
  * Returns an object with:
@@ -552,6 +548,17 @@ function __wbg_get_imports() {
     imports.wbg.__wbg___wbindgen_throw_dd24417ed36fc46e = function(arg0, arg1) {
         throw new Error(getStringFromWasm0(arg0, arg1));
     };
+    imports.wbg.__wbg_error_7534b8e9a36f1ab4 = function(arg0, arg1) {
+        let deferred0_0;
+        let deferred0_1;
+        try {
+            deferred0_0 = arg0;
+            deferred0_1 = arg1;
+            console.error(getStringFromWasm0(arg0, arg1));
+        } finally {
+            wasm.__wbindgen_free(deferred0_0, deferred0_1, 1);
+        }
+    };
     imports.wbg.__wbg_new_1ba21ce319a06297 = function() {
         const ret = new Object();
         return ret;
@@ -560,11 +567,22 @@ function __wbg_get_imports() {
         const ret = new Array();
         return ret;
     };
+    imports.wbg.__wbg_new_8a6f238a6ece86ea = function() {
+        const ret = new Error();
+        return ret;
+    };
     imports.wbg.__wbg_set_3f1d0b984ed272ed = function(arg0, arg1, arg2) {
         arg0[arg1] = arg2;
     };
     imports.wbg.__wbg_set_7df433eea03a5c14 = function(arg0, arg1, arg2) {
         arg0[arg1 >>> 0] = arg2;
+    };
+    imports.wbg.__wbg_stack_0ed75d68575b0f3c = function(arg0, arg1) {
+        const ret = arg1.stack;
+        const ptr1 = passStringToWasm0(ret, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        getDataViewMemory0().setInt32(arg0 + 4 * 1, len1, true);
+        getDataViewMemory0().setInt32(arg0 + 4 * 0, ptr1, true);
     };
     imports.wbg.__wbindgen_cast_2241b6af4c4b2941 = function(arg0, arg1) {
         // Cast intrinsic for `Ref(String) -> Externref`.
@@ -592,6 +610,7 @@ function __wbg_get_imports() {
 function __wbg_finalize_init(instance, module) {
     wasm = instance.exports;
     __wbg_init.__wbindgen_wasm_module = module;
+    cachedDataViewMemory0 = null;
     cachedUint16ArrayMemory0 = null;
     cachedUint8ArrayMemory0 = null;
 

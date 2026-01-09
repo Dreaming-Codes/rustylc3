@@ -254,246 +254,212 @@ pub fn init() {
 }
 
 // ============================================================================
-// Monaco Editor Integration
+// Monaco Editor Integration - Stateless Analysis Functions
 // ============================================================================
 
 use lc3_analysis::AnalyzedDocument;
 
-/// LC-3 Language Analysis for Monaco Editor integration.
+/// Analyze source code and return diagnostics.
+/// This is a stateless function that creates a fresh analysis each time.
 ///
-/// This class provides IDE-like features for LC-3 assembly:
-/// - Diagnostics (error markers)
-/// - Go to definition
-/// - Find all references  
-/// - Hover information
-/// - Code completions
+/// Returns an array of diagnostic objects with:
+/// - message: string
+/// - severity: "error" | "warning" | "info" | "hint"
+/// - startLineNumber: number (1-based)
+/// - startColumn: number (1-based)
+/// - endLineNumber: number (1-based)
+/// - endColumn: number (1-based)
 #[wasm_bindgen]
-pub struct LC3Language {
-    doc: Option<AnalyzedDocument>,
+pub fn analyze_diagnostics(source: &str) -> JsValue {
+    let doc = AnalyzedDocument::new(source);
+
+    let diagnostics: Vec<MonacoDiagnostic> = doc
+        .diagnostics()
+        .into_iter()
+        .map(|d| MonacoDiagnostic {
+            message: d.message,
+            severity: match d.severity {
+                lc3_analysis::Severity::Error => "error",
+                lc3_analysis::Severity::Warning => "warning",
+                lc3_analysis::Severity::Info => "info",
+                lc3_analysis::Severity::Hint => "hint",
+            },
+            start_line_number: d.start_line,
+            start_column: d.start_col,
+            end_line_number: d.end_line,
+            end_column: d.end_col,
+        })
+        .collect();
+
+    serde_wasm_bindgen::to_value(&diagnostics).unwrap_or(JsValue::NULL)
 }
 
+/// Get definition location for a position in the source code.
+/// This is a stateless function.
+///
+/// Returns null if no definition found, or an object with:
+/// - startLineNumber, startColumn, endLineNumber, endColumn
 #[wasm_bindgen]
-impl LC3Language {
-    /// Create a new language analysis instance.
-    #[wasm_bindgen(constructor)]
-    pub fn new() -> Self {
-        Self { doc: None }
-    }
+pub fn analyze_definition(source: &str, line: u32, column: u32) -> JsValue {
+    let doc = AnalyzedDocument::new(source);
 
-    /// Update the document with new source code.
-    /// Call this whenever the editor content changes.
-    pub fn update(&mut self, source: &str) {
-        self.doc = Some(AnalyzedDocument::new(source));
-    }
-
-    /// Get all diagnostics (errors/warnings) for the document.
-    ///
-    /// Returns an array of diagnostic objects with:
-    /// - message: string
-    /// - severity: "error" | "warning" | "info" | "hint"
-    /// - startLineNumber: number (1-based)
-    /// - startColumn: number (1-based)
-    /// - endLineNumber: number (1-based)
-    /// - endColumn: number (1-based)
-    pub fn get_diagnostics(&self) -> JsValue {
-        let Some(doc) = &self.doc else {
-            return JsValue::from(js_sys::Array::new());
-        };
-
-        let diagnostics: Vec<MonacoDiagnostic> = doc
-            .diagnostics()
-            .into_iter()
-            .map(|d| MonacoDiagnostic {
-                message: d.message,
-                severity: match d.severity {
-                    lc3_analysis::Severity::Error => "error",
-                    lc3_analysis::Severity::Warning => "warning",
-                    lc3_analysis::Severity::Info => "info",
-                    lc3_analysis::Severity::Hint => "hint",
-                },
-                start_line_number: d.start_line,
-                start_column: d.start_col,
-                end_line_number: d.end_line,
-                end_column: d.end_col,
-            })
-            .collect();
-
-        serde_wasm_bindgen::to_value(&diagnostics).unwrap_or(JsValue::NULL)
-    }
-
-    /// Get definition location for a position.
-    ///
-    /// Returns null if no definition found, or an object with:
-    /// - startLineNumber, startColumn, endLineNumber, endColumn
-    pub fn get_definition(&self, line: u32, column: u32) -> JsValue {
-        let Some(doc) = &self.doc else {
-            return JsValue::NULL;
-        };
-
-        match doc.definition(line, column) {
-            Some(loc) => {
-                let range = MonacoRange {
-                    start_line_number: loc.start_line,
-                    start_column: loc.start_col,
-                    end_line_number: loc.end_line,
-                    end_column: loc.end_col,
-                };
-                serde_wasm_bindgen::to_value(&range).unwrap_or(JsValue::NULL)
-            }
-            None => JsValue::NULL,
-        }
-    }
-
-    /// Get all references to the symbol at position.
-    ///
-    /// Returns an array of range objects.
-    pub fn get_references(&self, line: u32, column: u32) -> JsValue {
-        let Some(doc) = &self.doc else {
-            return JsValue::from(js_sys::Array::new());
-        };
-
-        let refs: Vec<MonacoRange> = doc
-            .references(line, column)
-            .into_iter()
-            .map(|loc| MonacoRange {
+    match doc.definition(line, column) {
+        Some(loc) => {
+            let range = MonacoRange {
                 start_line_number: loc.start_line,
                 start_column: loc.start_col,
                 end_line_number: loc.end_line,
                 end_column: loc.end_col,
-            })
-            .collect();
-
-        serde_wasm_bindgen::to_value(&refs).unwrap_or(JsValue::NULL)
-    }
-
-    /// Get hover information for a position.
-    ///
-    /// Returns null if no hover info, or an object with:
-    /// - contents: markdown string
-    pub fn get_hover(&self, line: u32, column: u32) -> JsValue {
-        let Some(doc) = &self.doc else {
-            return JsValue::NULL;
-        };
-
-        match doc.hover(line, column) {
-            Some(info) => {
-                let hover = MonacoHover {
-                    contents: info.contents,
-                };
-                serde_wasm_bindgen::to_value(&hover).unwrap_or(JsValue::NULL)
-            }
-            None => JsValue::NULL,
+            };
+            serde_wasm_bindgen::to_value(&range).unwrap_or(JsValue::NULL)
         }
-    }
-
-    /// Get completion suggestions for a position.
-    ///
-    /// Returns an array of completion items with:
-    /// - label: string
-    /// - kind: "label" | "keyword" | "snippet"
-    /// - detail: optional string
-    /// - documentation: optional string
-    /// - insertText: optional string
-    pub fn get_completions(&self, line: u32, column: u32) -> JsValue {
-        let Some(doc) = &self.doc else {
-            return JsValue::from(js_sys::Array::new());
-        };
-
-        let completions: Vec<MonacoCompletion> = doc
-            .completions(line, column)
-            .into_iter()
-            .map(|c| MonacoCompletion {
-                label: c.label,
-                kind: match c.kind {
-                    lc3_analysis::CompletionKind::Label => "label",
-                    lc3_analysis::CompletionKind::Keyword => "keyword",
-                    lc3_analysis::CompletionKind::Snippet => "snippet",
-                },
-                detail: c.detail,
-                documentation: c.documentation,
-                insert_text: c.insert_text,
-            })
-            .collect();
-
-        serde_wasm_bindgen::to_value(&completions).unwrap_or(JsValue::NULL)
-    }
-
-    /// Get all symbols (labels) in the document.
-    ///
-    /// Returns an array of symbol objects with:
-    /// - name: string
-    /// - kind: "label" | "subroutine" | "data"
-    /// - address: hex string (e.g., "x3000")
-    /// - range: { startLineNumber, startColumn, endLineNumber, endColumn }
-    pub fn get_symbols(&self) -> JsValue {
-        let Some(doc) = &self.doc else {
-            return JsValue::from(js_sys::Array::new());
-        };
-
-        let symbols: Vec<MonacoSymbol> = doc
-            .symbols()
-            .into_iter()
-            .map(|s| MonacoSymbol {
-                name: s.name,
-                kind: match s.kind {
-                    lc3_analysis::SymbolKind::Label => "label",
-                    lc3_analysis::SymbolKind::Subroutine => "subroutine",
-                    lc3_analysis::SymbolKind::Data => "data",
-                },
-                address: s.address.map(|a| format!("x{:04X}", a)),
-                range: MonacoRange {
-                    start_line_number: s.location.start_line,
-                    start_column: s.location.start_col,
-                    end_line_number: s.location.end_line,
-                    end_column: s.location.end_col,
-                },
-            })
-            .collect();
-
-        serde_wasm_bindgen::to_value(&symbols).unwrap_or(JsValue::NULL)
-    }
-
-    /// Get semantic tokens for syntax highlighting.
-    ///
-    /// Returns an array of token objects with:
-    /// - line: number (1-based)
-    /// - startColumn: number (1-based)
-    /// - length: number
-    /// - tokenType: "keyword" | "label" | "labelRef" | "register" | "number" | "string" | "comment" | "directive" | "operator"
-    pub fn get_tokens(&self) -> JsValue {
-        let Some(doc) = &self.doc else {
-            return JsValue::from(js_sys::Array::new());
-        };
-
-        let tokens: Vec<MonacoSemanticToken> = doc
-            .tokens()
-            .into_iter()
-            .map(|t| MonacoSemanticToken {
-                line: t.line,
-                start_column: t.start_col,
-                length: t.length,
-                token_type: match t.token_type {
-                    lc3_analysis::TokenType::Keyword => "keyword",
-                    lc3_analysis::TokenType::Label => "label",
-                    lc3_analysis::TokenType::LabelRef => "labelRef",
-                    lc3_analysis::TokenType::Register => "register",
-                    lc3_analysis::TokenType::Number => "number",
-                    lc3_analysis::TokenType::String => "string",
-                    lc3_analysis::TokenType::Comment => "comment",
-                    lc3_analysis::TokenType::Directive => "directive",
-                    lc3_analysis::TokenType::Operator => "operator",
-                },
-            })
-            .collect();
-
-        serde_wasm_bindgen::to_value(&tokens).unwrap_or(JsValue::NULL)
+        None => JsValue::NULL,
     }
 }
 
-impl Default for LC3Language {
-    fn default() -> Self {
-        Self::new()
+/// Get all references to the symbol at position.
+/// This is a stateless function.
+///
+/// Returns an array of range objects.
+#[wasm_bindgen]
+pub fn analyze_references(source: &str, line: u32, column: u32) -> JsValue {
+    let doc = AnalyzedDocument::new(source);
+
+    let refs: Vec<MonacoRange> = doc
+        .references(line, column)
+        .into_iter()
+        .map(|loc| MonacoRange {
+            start_line_number: loc.start_line,
+            start_column: loc.start_col,
+            end_line_number: loc.end_line,
+            end_column: loc.end_col,
+        })
+        .collect();
+
+    serde_wasm_bindgen::to_value(&refs).unwrap_or(JsValue::NULL)
+}
+
+/// Get hover information for a position.
+/// This is a stateless function.
+///
+/// Returns null if no hover info, or an object with:
+/// - contents: markdown string
+#[wasm_bindgen]
+pub fn analyze_hover(source: &str, line: u32, column: u32) -> JsValue {
+    let doc = AnalyzedDocument::new(source);
+
+    match doc.hover(line, column) {
+        Some(info) => {
+            let hover = MonacoHover {
+                contents: info.contents,
+            };
+            serde_wasm_bindgen::to_value(&hover).unwrap_or(JsValue::NULL)
+        }
+        None => JsValue::NULL,
     }
+}
+
+/// Get completion suggestions for a position.
+/// This is a stateless function.
+///
+/// Returns an array of completion items with:
+/// - label: string
+/// - kind: "label" | "keyword" | "snippet"
+/// - detail: optional string
+/// - documentation: optional string
+/// - insertText: optional string
+#[wasm_bindgen]
+pub fn analyze_completions(source: &str, line: u32, column: u32) -> JsValue {
+    let doc = AnalyzedDocument::new(source);
+
+    let completions: Vec<MonacoCompletion> = doc
+        .completions(line, column)
+        .into_iter()
+        .map(|c| MonacoCompletion {
+            label: c.label,
+            kind: match c.kind {
+                lc3_analysis::CompletionKind::Label => "label",
+                lc3_analysis::CompletionKind::Keyword => "keyword",
+                lc3_analysis::CompletionKind::Snippet => "snippet",
+            },
+            detail: c.detail,
+            documentation: c.documentation,
+            insert_text: c.insert_text,
+        })
+        .collect();
+
+    serde_wasm_bindgen::to_value(&completions).unwrap_or(JsValue::NULL)
+}
+
+/// Get all symbols (labels) in the document.
+/// This is a stateless function.
+///
+/// Returns an array of symbol objects with:
+/// - name: string
+/// - kind: "label" | "subroutine" | "data"
+/// - address: hex string (e.g., "x3000")
+/// - range: { startLineNumber, startColumn, endLineNumber, endColumn }
+#[wasm_bindgen]
+pub fn analyze_symbols(source: &str) -> JsValue {
+    let doc = AnalyzedDocument::new(source);
+
+    let symbols: Vec<MonacoSymbol> = doc
+        .symbols()
+        .into_iter()
+        .map(|s| MonacoSymbol {
+            name: s.name,
+            kind: match s.kind {
+                lc3_analysis::SymbolKind::Label => "label",
+                lc3_analysis::SymbolKind::Subroutine => "subroutine",
+                lc3_analysis::SymbolKind::Data => "data",
+            },
+            address: s.address.map(|a| format!("x{:04X}", a)),
+            range: MonacoRange {
+                start_line_number: s.location.start_line,
+                start_column: s.location.start_col,
+                end_line_number: s.location.end_line,
+                end_column: s.location.end_col,
+            },
+        })
+        .collect();
+
+    serde_wasm_bindgen::to_value(&symbols).unwrap_or(JsValue::NULL)
+}
+
+/// Get semantic tokens for syntax highlighting.
+/// This is a stateless function.
+///
+/// Returns an array of token objects with:
+/// - line: number (1-based)
+/// - startColumn: number (1-based)
+/// - length: number
+/// - tokenType: "keyword" | "label" | "labelRef" | "register" | "number" | "string" | "comment" | "directive" | "operator"
+#[wasm_bindgen]
+pub fn analyze_tokens(source: &str) -> JsValue {
+    let doc = AnalyzedDocument::new(source);
+
+    let tokens: Vec<MonacoSemanticToken> = doc
+        .tokens()
+        .into_iter()
+        .map(|t| MonacoSemanticToken {
+            line: t.line,
+            start_column: t.start_col,
+            length: t.length,
+            token_type: match t.token_type {
+                lc3_analysis::TokenType::Keyword => "keyword",
+                lc3_analysis::TokenType::Label => "label",
+                lc3_analysis::TokenType::LabelRef => "labelRef",
+                lc3_analysis::TokenType::Register => "register",
+                lc3_analysis::TokenType::Number => "number",
+                lc3_analysis::TokenType::String => "string",
+                lc3_analysis::TokenType::Comment => "comment",
+                lc3_analysis::TokenType::Directive => "directive",
+                lc3_analysis::TokenType::Operator => "operator",
+            },
+        })
+        .collect();
+
+    serde_wasm_bindgen::to_value(&tokens).unwrap_or(JsValue::NULL)
 }
 
 // Monaco-compatible types for serialization
