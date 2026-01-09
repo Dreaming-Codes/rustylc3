@@ -9,9 +9,11 @@ crate-type = ["cdylib", "rlib"]
 [dependencies]
 lc3-core = { path = "../lc3-core" }
 lc3-assembler = { path = "../lc3-assembler" }
+lc3-analysis = { path = "../lc3-analysis" }
 wasm-bindgen = "0.2"
 serde = { version = "1", features = ["derive"] }
 serde-wasm-bindgen = "0.6"
+js-sys = "0.3"
 
 [dependencies.web-sys]
 version = "0.3"

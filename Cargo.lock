@@ -220,6 +220,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "lc3-analysis"
+version = "0.1.0"
+dependencies = [
+ "lc3-parser",
+ "serde",
+]
+
+[[package]]
 name = "lc3-assembler"
 version = "0.1.0"
 dependencies = [
@@ -251,6 +259,8 @@ dependencies = [
 name = "lc3-wasm"
 version = "0.1.0"
 dependencies = [
+ "js-sys",
+ "lc3-analysis",
  "lc3-assembler",
  "lc3-core",
  "serde",

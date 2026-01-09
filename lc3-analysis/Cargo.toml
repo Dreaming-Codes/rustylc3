@@ -1,0 +1,8 @@
+[package]
+name = "lc3-analysis"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+lc3-parser = { path = "../lc3-parser" }
+serde = { version = "1", features = ["derive"] }
