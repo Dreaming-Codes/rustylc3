@@ -9,6 +9,7 @@ set -e
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -25,9 +26,10 @@ fi
 
 # Check for lc3sim
 if ! command -v lc3sim &> /dev/null; then
-    echo -e "${RED}Error: lc3sim is not installed or not in PATH${NC}"
-    echo "Please install lc3sim and ensure it's available in your PATH"
-    exit 1
+    echo -e "${YELLOW}Warning: lc3sim is not installed - will only benchmark rustylc3${NC}"
+    HAS_LC3SIM=false
+else
+    HAS_LC3SIM=true
 fi
 
 # Build rustylc3 in release mode
@@ -74,12 +76,13 @@ for bench in "${BENCHMARKS[@]}"; do
             continue
         }
         # Also create .obj for lc3sim using lc3as if available
-        if command -v lc3as &> /dev/null; then
+        if [ "$HAS_LC3SIM" = true ] && command -v lc3as &> /dev/null; then
             cp "$ASM_FILE" "$TEMP_DIR/${bench}.asm"
             (cd "$TEMP_DIR" && lc3as "${bench}.asm" 2>/dev/null) || {
                 echo -e "${YELLOW}Warning: Failed to assemble $bench with lc3as${NC}"
             }
         fi
+        echo -e "  ${GREEN}✓${NC} $bench"
     fi
 done
 
@@ -91,11 +94,6 @@ echo -e "${YELLOW}======================================${NC}"
 echo -e "${YELLOW}  Running Benchmarks with Hyperfine  ${NC}"
 echo -e "${YELLOW}======================================${NC}"
 echo ""
-
-# Combined results file
-COMBINED_JSON="$RESULTS_DIR/all_benchmarks.json"
-echo '{"benchmarks": [' > "$COMBINED_JSON"
-FIRST=true
 
 for bench in "${BENCHMARKS[@]}"; do
     BIN_FILE="$TEMP_DIR/${bench}.bin"
@@ -110,7 +108,7 @@ for bench in "${BENCHMARKS[@]}"; do
     echo "----------------------------------------"
     
     # Check if lc3sim .obj file exists
-    if [ -f "$OBJ_FILE" ]; then
+    if [ "$HAS_LC3SIM" = true ] && [ -f "$OBJ_FILE" ]; then
         hyperfine \
             --warmup 10 \
             --min-runs 50 \
@@ -119,9 +117,8 @@ for bench in "${BENCHMARKS[@]}"; do
             --export-json "$RESULTS_DIR/${bench}.json" \
             --export-markdown "$RESULTS_DIR/${bench}.md" \
             --command-name "rustylc3" "$LC3_BIN run $BIN_FILE" \
-            --command-name "lc3sim" "echo 'c' | lc3sim $OBJ_FILE"
+            --command-name "lc3sim" "bash -c \"printf 'file $OBJ_FILE\nc\nquit\n' | lc3sim\""
     else
-        echo -e "${YELLOW}Note: Only benchmarking rustylc3 (lc3sim .obj not available)${NC}"
         hyperfine \
             --warmup 10 \
             --min-runs 50 \

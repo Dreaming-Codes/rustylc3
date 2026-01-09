@@ -46,8 +46,12 @@ MODIFY_LOOP
     ADD R5, R5, #-1
     BRp MAIN_LOOP
 
+    ; Output a character so lc3sim works in non-interactive mode
+    LD R0, DONE_CHAR
+    OUT
     HALT
 
+DONE_CHAR .FILL x0021   ; '!'
 ITERATIONS .FILL #500
 BLOCK_SIZE .FILL #50
 PATTERN .FILL xAAAA

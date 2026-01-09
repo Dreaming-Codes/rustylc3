@@ -17,7 +17,12 @@ NEXT_NUMBER
     ADD R3, R5, R3      ; R3 = END_NUM - current
     BRp NEXT_NUMBER
 
+    ; Output a character so lc3sim works in non-interactive mode
+    LD R0, DONE_CHAR
+    OUT
     HALT
+
+DONE_CHAR .FILL x0021   ; '!'
 
 ; IS_PRIME subroutine
 ; Input: R1 = number to check

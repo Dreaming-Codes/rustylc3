@@ -16,8 +16,12 @@ FIB_LOOP
     ADD R3, R3, #-1     ; decrement counter
     BRp FIB_LOOP        ; continue if counter > 0
 
+    ; Output a character so lc3sim works in non-interactive mode
+    LD R0, DONE_CHAR
+    OUT
     HALT
 
 COUNT .FILL #10000      ; Calculate 10000 iterations
+DONE_CHAR .FILL x0021   ; '!'
 
 .END

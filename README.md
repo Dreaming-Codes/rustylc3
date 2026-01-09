@@ -10,46 +10,21 @@ A fast LC-3 virtual machine, assembler, and CLI written in Rust.
 
 ## Benchmarks
 
-Performance comparison between rustylc3 and lc3sim across various workloads:
+Performance comparison between rustylc3 and lc3sim (reference C implementation):
 
-```
-                        Execution Time (lower is better)
-                        
-fibonacci         ████████████████████████████████████  2.1 ms  lc3sim
-                  ██████████                            0.6 ms  rustylc3  (3.5x faster)
+| Benchmark | rustylc3 | lc3sim | Speedup |
+|-----------|----------|--------|---------|
+| fibonacci | 1.1 ms | 5.0 ms | **4.5x faster** |
+| bubble_sort | 1.4 ms | 5.7 ms | **4.1x faster** |
+| multiply | 1.0 ms | 5.1 ms | **5.2x faster** |
+| prime_sieve | 2.2 ms | 8.4 ms | **3.8x faster** |
+| memory_stress | 1.7 ms | 7.2 ms | **4.2x faster** |
+| nested_loops | 6.9 ms | 22.0 ms | **3.2x faster** |
+| subroutine_calls | 1.3 ms | 5.8 ms | **4.5x faster** |
 
-bubble_sort       █████████████████████████             1.4 ms  lc3sim
-                  ██████████████                        0.8 ms  rustylc3  (1.8x faster)
+rustylc3 is **3-5x faster** than lc3sim across all benchmarks.
 
-multiply          █████████████████████████             1.4 ms  lc3sim
-                  ██████████████                        0.8 ms  rustylc3  (1.75x faster)
-
-prime_sieve       █████████████████████████             1.4 ms  lc3sim
-                  ████████████████                      0.9 ms  rustylc3  (1.6x faster)
-
-memory_stress     █████████████████████████             1.4 ms  lc3sim
-                  ███████████████████                   1.1 ms  rustylc3  (1.3x faster)
-
-subroutine_calls  █████████████████████████             1.4 ms  lc3sim
-                  ██████████████████                    1.0 ms  rustylc3  (1.4x faster)
-
-nested_loops      ████████████████████████████████████  2.4 ms  rustylc3
-                  █████████████████████                 1.4 ms  lc3sim    (1.7x faster)
-```
-
-| Benchmark | rustylc3 | lc3sim | Winner |
-|-----------|----------|--------|--------|
-| fibonacci | 0.6 ms | 2.1 ms | rustylc3 (3.5x) |
-| bubble_sort | 0.8 ms | 1.4 ms | rustylc3 (1.8x) |
-| multiply | 0.8 ms | 1.4 ms | rustylc3 (1.75x) |
-| prime_sieve | 0.9 ms | 1.4 ms | rustylc3 (1.6x) |
-| memory_stress | 1.1 ms | 1.4 ms | rustylc3 (1.3x) |
-| subroutine_calls | 1.0 ms | 1.4 ms | rustylc3 (1.4x) |
-| nested_loops | 2.4 ms | 1.4 ms | lc3sim (1.7x) |
-
-rustylc3 wins **6 out of 7** benchmarks.
-
-> Run your own benchmarks with `./benchmark.sh` - see [benchmarks/README.md](benchmarks/README.md) for details.
+> Run your own benchmarks with `./benchmark.sh`
 
 ## Project Structure
 

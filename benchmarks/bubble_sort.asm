@@ -41,10 +41,14 @@ NO_SWAP
     ADD R6, R6, #-1     ; decrement repeat counter
     BRp REPEAT_LOOP
 
+    ; Output a character so lc3sim works in non-interactive mode
+    LD R0, DONE_CHAR
+    OUT
     HALT
 
 REPEAT_COUNT .FILL #100
 SIZE .FILL #20
+DONE_CHAR .FILL x0021   ; '!'
 
 ARRAY
     .FILL #89

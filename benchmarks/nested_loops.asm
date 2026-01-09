@@ -24,7 +24,12 @@ INNER
     ADD R5, R5, #-1
     BRp OUTER
 
+    ; Output a character so lc3sim works in non-interactive mode
+    LD R0, DONE_CHAR
+    OUT
     HALT
+
+DONE_CHAR .FILL x0021  ; '!'
 
 OUTER_COUNT .FILL #100
 MIDDLE_COUNT .FILL #100
