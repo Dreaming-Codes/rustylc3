@@ -21,8 +21,8 @@
 //! ```
 
 pub use lc3_parser::{
-    AddSrc2, AndSrc2, Directive, Instruction, Line, Operand, ParseError, Program, Register,
-    format_errors, parse,
+    AddSrc2, AndSrc2, Directive, Instruction, Line, Operand, ParseError, Program, Register, Span,
+    Spanned, SpannedLine, format_errors, parse,
 };
 
 use std::collections::HashMap;
@@ -99,17 +99,17 @@ impl Assembler {
     fn first_pass(&mut self, program: &Program) -> Result<(), AssemblyError> {
         let mut pc = self.origin;
 
-        for line in &program.lines {
-            match line {
+        for spanned_line in &program.lines {
+            match &spanned_line.line {
                 Line::Label(label) => {
-                    self.symbols.insert(label.clone(), pc);
+                    self.symbols.insert(label.value.clone(), pc);
                 }
                 Line::LabeledDirective(label, dir) => {
-                    self.symbols.insert(label.clone(), pc);
+                    self.symbols.insert(label.value.clone(), pc);
                     pc = self.advance_pc_directive(dir, pc)?;
                 }
                 Line::LabeledInstruction(label, _) => {
-                    self.symbols.insert(label.clone(), pc);
+                    self.symbols.insert(label.value.clone(), pc);
                     pc += 1;
                 }
                 Line::Directive(dir) => {
@@ -139,8 +139,8 @@ impl Assembler {
         let mut result = Vec::new();
         let mut pc = self.origin;
 
-        for line in &program.lines {
-            match line {
+        for spanned_line in &program.lines {
+            match &spanned_line.line {
                 Line::Label(_) => {}
                 Line::LabeledDirective(_, dir) | Line::Directive(dir) => {
                     let (words, new_pc) = self.emit_directive(dir, pc)?;
@@ -175,15 +175,12 @@ impl Assembler {
     fn resolve_operand(&self, op: &Operand) -> Result<u16, AssemblyError> {
         match op {
             Operand::Immediate(v) => Ok(*v as u16),
-            Operand::Label(label) => {
-                self.symbols
-                    .get(label)
-                    .copied()
-                    .ok_or_else(|| AssemblyError::SemanticError {
-                        message: format!("undefined symbol: {label}"),
-                        line: None,
-                    })
-            }
+            Operand::Label(label) => self.symbols.get(&label.value).copied().ok_or_else(|| {
+                AssemblyError::SemanticError {
+                    message: format!("undefined symbol: {}", label.value),
+                    line: None,
+                }
+            }),
             Operand::Register(_) => Err(AssemblyError::SemanticError {
                 message: "cannot use register as value".into(),
                 line: None,
@@ -250,16 +247,16 @@ impl Assembler {
         n: bool,
         z: bool,
         p: bool,
-        label: &str,
+        label: &Spanned<String>,
         pc: u16,
     ) -> Result<u16, AssemblyError> {
-        let offset = self.resolve_label(label, pc)?;
+        let offset = self.resolve_label(&label.value, pc)?;
         check_offset(offset, 9, "BR")?;
         Ok((n as u16) << 11 | (z as u16) << 10 | (p as u16) << 9 | (offset as u16 & 0x1FF))
     }
 
-    fn emit_jsr(&self, label: &str, pc: u16) -> Result<u16, AssemblyError> {
-        let offset = self.resolve_label(label, pc)?;
+    fn emit_jsr(&self, label: &Spanned<String>, pc: u16) -> Result<u16, AssemblyError> {
+        let offset = self.resolve_label(&label.value, pc)?;
         check_offset(offset, 11, "JSR")?;
         Ok((0b0100 << 12) | (1 << 11) | (offset as u16 & 0x7FF))
     }
@@ -268,11 +265,11 @@ impl Assembler {
         &self,
         op: u16,
         reg: u8,
-        label: &str,
+        label: &Spanned<String>,
         pc: u16,
         bits: u8,
     ) -> Result<u16, AssemblyError> {
-        let offset = self.resolve_label(label, pc)?;
+        let offset = self.resolve_label(&label.value, pc)?;
         check_offset(offset, bits, op_name(op))?;
         let mask = (1u16 << bits) - 1;
         Ok((op << 12) | (reg as u16) << 9 | (offset as u16 & mask))

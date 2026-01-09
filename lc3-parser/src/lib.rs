@@ -4,6 +4,38 @@
 
 use chumsky::prelude::*;
 use chumsky::recovery::via_parser;
+use chumsky::span::SimpleSpan;
+use std::ops::Range;
+
+/// A source span (byte offset range).
+pub type Span = Range<usize>;
+
+/// A value with its source location.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Spanned<T> {
+    pub value: T,
+    pub span: Span,
+}
+
+impl<T> Spanned<T> {
+    pub fn new(value: T, span: Span) -> Self {
+        Self { value, span }
+    }
+
+    pub fn map<U>(self, f: impl FnOnce(T) -> U) -> Spanned<U> {
+        Spanned {
+            value: f(self.value),
+            span: self.span,
+        }
+    }
+}
+
+impl<T> std::ops::Deref for Spanned<T> {
+    type Target = T;
+    fn deref(&self) -> &Self::Target {
+        &self.value
+    }
+}
 
 /// A register R0-R7.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -14,7 +46,7 @@ pub struct Register(pub u8);
 pub enum Operand {
     Register(Register),
     Immediate(i16),
-    Label(String),
+    Label(Spanned<String>),
     String(String),
 }
 
@@ -63,25 +95,25 @@ pub enum Instruction {
         n: bool,
         z: bool,
         p: bool,
-        label: String,
+        label: Spanned<String>,
     },
     Jmp {
         base: Register,
     },
     Ret,
     Jsr {
-        label: String,
+        label: Spanned<String>,
     },
     Jsrr {
         base: Register,
     },
     Ld {
         dr: Register,
-        label: String,
+        label: Spanned<String>,
     },
     Ldi {
         dr: Register,
-        label: String,
+        label: Spanned<String>,
     },
     Ldr {
         dr: Register,
@@ -90,15 +122,15 @@ pub enum Instruction {
     },
     Lea {
         dr: Register,
-        label: String,
+        label: Spanned<String>,
     },
     St {
         sr: Register,
-        label: String,
+        label: Spanned<String>,
     },
     Sti {
         sr: Register,
-        label: String,
+        label: Spanned<String>,
     },
     Str {
         sr: Register,
@@ -120,19 +152,26 @@ pub enum Instruction {
 /// A parsed line of assembly.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Line {
-    Label(String),
-    LabeledDirective(String, Directive),
-    LabeledInstruction(String, Instruction),
+    Label(Spanned<String>),
+    LabeledDirective(Spanned<String>, Directive),
+    LabeledInstruction(Spanned<String>, Instruction),
     Directive(Directive),
     Instruction(Instruction),
     Empty,
     Error,
 }
 
+/// A parsed line with its source span.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SpannedLine {
+    pub line: Line,
+    pub span: Span,
+}
+
 /// A complete parsed program.
 #[derive(Debug, Clone)]
 pub struct Program {
-    pub lines: Vec<Line>,
+    pub lines: Vec<SpannedLine>,
 }
 
 type ParserInput<'a> = &'a str;
@@ -230,7 +269,7 @@ fn number<'a>() -> impl Parser<'a, ParserInput<'a>, i16, ParserExtra<'a>> + Clon
         .labelled("number")
 }
 
-fn identifier<'a>() -> impl Parser<'a, ParserInput<'a>, String, ParserExtra<'a>> + Clone {
+fn identifier<'a>() -> impl Parser<'a, ParserInput<'a>, Spanned<String>, ParserExtra<'a>> + Clone {
     any()
         .filter(|c: &char| c.is_ascii_alphabetic() || *c == '_')
         .then(
@@ -239,7 +278,10 @@ fn identifier<'a>() -> impl Parser<'a, ParserInput<'a>, String, ParserExtra<'a>>
                 .repeated(),
         )
         .to_slice()
-        .map(|s: &str| s.to_uppercase())
+        .map_with(|s: &str, e| {
+            let span: SimpleSpan = e.span();
+            Spanned::new(s.to_uppercase(), span.into_range())
+        })
         .labelled("label")
 }
 
@@ -501,24 +543,26 @@ fn is_reserved(name: &str) -> bool {
     RESERVED.contains(&name)
 }
 
-fn label_with_colon<'a>() -> impl Parser<'a, ParserInput<'a>, String, ParserExtra<'a>> + Clone {
+fn label_with_colon<'a>()
+-> impl Parser<'a, ParserInput<'a>, Spanned<String>, ParserExtra<'a>> + Clone {
     identifier().then_ignore(just(':'))
 }
 
-fn label_without_colon<'a>() -> impl Parser<'a, ParserInput<'a>, String, ParserExtra<'a>> + Clone {
-    identifier().try_map(|name: String, span| {
-        if is_reserved(&name) {
+fn label_without_colon<'a>()
+-> impl Parser<'a, ParserInput<'a>, Spanned<String>, ParserExtra<'a>> + Clone {
+    identifier().try_map(|spanned: Spanned<String>, span| {
+        if is_reserved(&spanned.value) {
             Err(Rich::custom(
                 span,
-                format!("'{name}' is a reserved keyword"),
+                format!("'{}' is a reserved keyword", spanned.value),
             ))
         } else {
-            Ok(name)
+            Ok(spanned)
         }
     })
 }
 
-fn line<'a>() -> impl Parser<'a, ParserInput<'a>, Line, ParserExtra<'a>> + Clone {
+fn line<'a>() -> impl Parser<'a, ParserInput<'a>, SpannedLine, ParserExtra<'a>> + Clone {
     let labeled_colon_dir = label_with_colon()
         .then_ignore(ws())
         .then(directive())
@@ -558,8 +602,21 @@ fn line<'a>() -> impl Parser<'a, ParserInput<'a>, Line, ParserExtra<'a>> + Clone
         label_only,
         empty,
     )))
+    .map_with(|line, e| {
+        let span: SimpleSpan = e.span();
+        SpannedLine {
+            line,
+            span: span.into_range(),
+        }
+    })
     .then_ignore(eol.recover_with(via_parser(skip_to_eol)))
-    .recover_with(via_parser(recovery))
+    .recover_with(via_parser(recovery.map_with(|line, e| {
+        let span: SimpleSpan = e.span();
+        SpannedLine {
+            line,
+            span: span.into_range(),
+        }
+    })))
 }
 
 fn program<'a>() -> impl Parser<'a, ParserInput<'a>, Program, ParserExtra<'a>> {
@@ -567,7 +624,7 @@ fn program<'a>() -> impl Parser<'a, ParserInput<'a>, Program, ParserExtra<'a>> {
         .separated_by(just('\n'))
         .allow_trailing()
         .collect()
-        .map(|lines| Program { lines })
+        .map(|lines: Vec<SpannedLine>| Program { lines })
 }
 
 // ============================================================================
