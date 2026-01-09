@@ -99,19 +99,29 @@ let vm: InstanceType<typeof import('@/wasm/lc3_wasm').WasmLC3> | null = null
 // Auto-run interval
 let autoRunInterval: ReturnType<typeof setInterval> | null = null
 
+// Promise to track ongoing initialization
+let initPromise: Promise<void> | null = null
+
 export async function initWasm() {
+  // Return existing promise if initialization is in progress
+  if (initPromise) return initPromise
+  // Return immediately if already initialized
   if (wasmModule) return
 
-  const wasm = await import('@/wasm/lc3_wasm')
-  await wasm.default()
+  initPromise = (async () => {
+    const wasm = await import('@/wasm/lc3_wasm')
+    await wasm.default()
 
-  wasmModule = wasm
-  vm = new wasm.WasmLC3()
+    wasmModule = wasm
+    vm = new wasm.WasmLC3()
 
-  lc3Store.setState((s) => ({ ...s, wasmReady: true }))
+    lc3Store.setState((s) => ({ ...s, wasmReady: true }))
 
-  // Initial analysis
-  updateSourceCode(lc3Store.state.sourceCode)
+    // Initial analysis
+    updateSourceCode(lc3Store.state.sourceCode)
+  })()
+
+  return initPromise
 }
 
 export function updateSourceCode(code: string) {

@@ -57,8 +57,9 @@ impl WasmLC3 {
     }
 
     /// Reset the VM to its initial state.
+    /// Uses in-place clearing to avoid memory allocation issues in WASM.
     pub fn reset(&mut self) {
-        self.vm = LC3::default();
+        self.vm.clear();
     }
 
     /// Load a program into memory at the specified origin.

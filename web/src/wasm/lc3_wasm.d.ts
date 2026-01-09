@@ -62,6 +62,7 @@ export class WasmLC3 {
   step(): any;
   /**
    * Reset the VM to its initial state.
+   * Uses in-place clearing to avoid memory allocation issues in WASM.
    */
   reset(): void;
   /**

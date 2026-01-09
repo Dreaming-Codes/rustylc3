@@ -17,16 +17,17 @@ export function MemoryPanel() {
   const pc = useStore(lc3Store, (s) => s.pc)
   const origin = useStore(lc3Store, (s) => s.origin)
   const wasmReady = useStore(lc3Store, (s) => s.wasmReady)
+  const isAssembled = useStore(lc3Store, (s) => s.isAssembled)
 
   const [startAddr, setStartAddr] = useState(0x3000)
   const [memory, setMemory] = useState<number[]>([])
 
-  // Update memory when PC changes or manually
+  // Update memory when PC changes, after assembly, or manually
   useEffect(() => {
     if (wasmReady) {
       setMemory(getMemory(startAddr, ROWS_TO_SHOW))
     }
-  }, [startAddr, pc, wasmReady])
+  }, [startAddr, pc, wasmReady, isAssembled])
 
   // Jump to origin
   const handleGoToOrigin = useCallback(() => {

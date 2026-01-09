@@ -260,6 +260,7 @@ export class WasmLC3 {
     }
     /**
      * Reset the VM to its initial state.
+     * Uses in-place clearing to avoid memory allocation issues in WASM.
      */
     reset() {
         wasm.wasmlc3_reset(this.__wbg_ptr);

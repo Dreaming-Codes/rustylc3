@@ -62,6 +62,17 @@ impl Default for LC3 {
 }
 
 impl LC3 {
+    /// Reset the VM to its initial state, clearing memory in place.
+    /// This is more efficient than creating a new VM as it reuses the existing memory allocation.
+    pub fn clear(&mut self) {
+        self.memory.fill(0);
+        self.regs.fill(0);
+        self.pc = 0x3000;
+        self.cond = 0b010; // Z flag set initially
+    }
+}
+
+impl LC3 {
     /// Returns true if negative flag is set.
     #[inline]
     pub fn n(&self) -> bool {
