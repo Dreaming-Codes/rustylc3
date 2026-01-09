@@ -231,6 +231,7 @@ dependencies = [
 name = "lc3-assembler"
 version = "0.1.0"
 dependencies = [
+ "ariadne",
  "lc3-parser",
 ]
 

@@ -27,16 +27,28 @@ pub use lc3_parser::{
 
 use std::collections::HashMap;
 
+/// A semantic error with location information.
+#[derive(Debug, Clone)]
+pub struct SemanticError {
+    pub message: String,
+    pub line: usize,
+    pub column: usize,
+    pub span: std::ops::Range<usize>,
+}
+
+impl std::fmt::Display for SemanticError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}:{}: {}", self.line, self.column, self.message)
+    }
+}
+
 /// Assembly error with location information.
 #[derive(Debug)]
 pub enum AssemblyError {
     /// Syntax errors from the parser.
     ParseErrors(Vec<ParseError>),
     /// Semantic errors (undefined labels, range violations).
-    SemanticError {
-        message: String,
-        line: Option<usize>,
-    },
+    SemanticErrors(Vec<SemanticError>),
 }
 
 impl std::fmt::Display for AssemblyError {
@@ -48,10 +60,12 @@ impl std::fmt::Display for AssemblyError {
                 }
                 Ok(())
             }
-            Self::SemanticError { message, line } => match line {
-                Some(n) => write!(f, "line {n}: {message}"),
-                None => write!(f, "{message}"),
-            },
+            Self::SemanticErrors(errors) => {
+                for e in errors {
+                    writeln!(f, "{e}")?;
+                }
+                Ok(())
+            }
         }
     }
 }
@@ -86,22 +100,29 @@ impl Assembler {
         self.origin = 0x3000;
 
         let program = parse(source).map_err(AssemblyError::ParseErrors)?;
-        self.first_pass(&program)?;
-        self.second_pass(&program)
+
+        let mut errors = Vec::new();
+        self.first_pass(&program, source, &mut errors);
+        let code = self.second_pass(&program, source, &mut errors);
+
+        if errors.is_empty() {
+            Ok(code)
+        } else {
+            Err(AssemblyError::SemanticErrors(errors))
+        }
     }
 
     /// Format an error with source context for display.
     pub fn format_error(&self, filename: &str, source: &str, error: &AssemblyError) -> String {
         match error {
             AssemblyError::ParseErrors(errors) => format_errors(filename, source, errors),
-            AssemblyError::SemanticError { message, line } => match line {
-                Some(n) => format!("Error at line {n}: {message}"),
-                None => format!("Error: {message}"),
-            },
+            AssemblyError::SemanticErrors(errors) => {
+                format_semantic_errors(filename, source, errors)
+            }
         }
     }
 
-    fn first_pass(&mut self, program: &Program) -> Result<(), AssemblyError> {
+    fn first_pass(&mut self, program: &Program, _source: &str, _errors: &mut Vec<SemanticError>) {
         let mut pc = self.origin;
 
         for spanned_line in &program.lines {
@@ -111,24 +132,23 @@ impl Assembler {
                 }
                 Line::LabeledDirective(label, dir) => {
                     self.symbols.insert(label.value.clone(), pc);
-                    pc = self.advance_pc_directive(dir, pc)?;
+                    pc = self.advance_pc_directive(dir, pc);
                 }
                 Line::LabeledInstruction(label, _) => {
                     self.symbols.insert(label.value.clone(), pc);
                     pc += 1;
                 }
                 Line::Directive(dir) => {
-                    pc = self.advance_pc_directive(dir, pc)?;
+                    pc = self.advance_pc_directive(dir, pc);
                 }
                 Line::Instruction(_) => pc += 1,
                 Line::Empty | Line::Error => {}
             }
         }
-        Ok(())
     }
 
-    fn advance_pc_directive(&mut self, dir: &Directive, pc: u16) -> Result<u16, AssemblyError> {
-        Ok(match dir {
+    fn advance_pc_directive(&mut self, dir: &Directive, pc: u16) -> u16 {
+        match dir {
             Directive::Orig(addr) => {
                 self.origin = *addr;
                 *addr
@@ -137,10 +157,15 @@ impl Assembler {
             Directive::Blkw(n) => pc + n,
             Directive::Stringz(s) => pc + s.len() as u16 + 1,
             Directive::End => pc,
-        })
+        }
     }
 
-    fn second_pass(&self, program: &Program) -> Result<Vec<u16>, AssemblyError> {
+    fn second_pass(
+        &self,
+        program: &Program,
+        source: &str,
+        errors: &mut Vec<SemanticError>,
+    ) -> Vec<u16> {
         let mut result = Vec::new();
         let mut pc = self.origin;
 
@@ -148,24 +173,38 @@ impl Assembler {
             match &spanned_line.line {
                 Line::Label(_) => {}
                 Line::LabeledDirective(_, dir) | Line::Directive(dir) => {
-                    let (words, new_pc) = self.emit_directive(dir, pc)?;
+                    let (words, new_pc) =
+                        self.emit_directive(dir, pc, source, spanned_line.span.clone(), errors);
                     result.extend(words);
                     pc = new_pc;
                 }
                 Line::LabeledInstruction(_, instr) | Line::Instruction(instr) => {
-                    result.push(self.emit_instruction(instr, pc)?);
+                    result.push(self.emit_instruction(
+                        instr,
+                        pc,
+                        source,
+                        spanned_line.span.clone(),
+                        errors,
+                    ));
                     pc += 1;
                 }
                 Line::Empty | Line::Error => {}
             }
         }
-        Ok(result)
+        result
     }
 
-    fn emit_directive(&self, dir: &Directive, pc: u16) -> Result<(Vec<u16>, u16), AssemblyError> {
-        Ok(match dir {
+    fn emit_directive(
+        &self,
+        dir: &Directive,
+        pc: u16,
+        source: &str,
+        span: Span,
+        errors: &mut Vec<SemanticError>,
+    ) -> (Vec<u16>, u16) {
+        match dir {
             Directive::Orig(addr) => (vec![], *addr),
-            Directive::Fill(op) => (vec![self.resolve_operand(op)?], pc + 1),
+            Directive::Fill(op) => (vec![self.resolve_operand(op, source, span, errors)], pc + 1),
             Directive::Blkw(n) => (vec![0; *n as usize], pc + n),
             Directive::Stringz(s) => {
                 let mut words: Vec<u16> = s.chars().map(|c| c as u16).collect();
@@ -174,57 +213,97 @@ impl Assembler {
                 (words, pc + len)
             }
             Directive::End => (vec![], pc),
-        })
-    }
-
-    fn resolve_operand(&self, op: &Operand) -> Result<u16, AssemblyError> {
-        match op {
-            Operand::Immediate(v) => Ok(*v as u16),
-            Operand::Label(label) => self.symbols.get(&label.value).copied().ok_or_else(|| {
-                AssemblyError::SemanticError {
-                    message: format!("undefined symbol: {}", label.value),
-                    line: None,
-                }
-            }),
-            Operand::Register(_) => Err(AssemblyError::SemanticError {
-                message: "cannot use register as value".into(),
-                line: None,
-            }),
-            Operand::String(_) => Err(AssemblyError::SemanticError {
-                message: "cannot use string as value".into(),
-                line: None,
-            }),
         }
     }
 
-    fn resolve_label(&self, label: &str, pc: u16) -> Result<i16, AssemblyError> {
-        self.symbols
-            .get(label)
-            .map(|&addr| addr.wrapping_sub(pc + 1) as i16)
-            .ok_or_else(|| AssemblyError::SemanticError {
-                message: format!("undefined symbol: {label}"),
-                line: None,
-            })
+    fn resolve_operand(
+        &self,
+        op: &Operand,
+        source: &str,
+        span: Span,
+        errors: &mut Vec<SemanticError>,
+    ) -> u16 {
+        match op {
+            Operand::Immediate(v) => *v as u16,
+            Operand::Label(label) => {
+                if let Some(&addr) = self.symbols.get(&label.value) {
+                    addr
+                } else {
+                    errors.push(make_error(
+                        source,
+                        label.span.clone(),
+                        format!("undefined symbol: {}", label.value),
+                    ));
+                    0
+                }
+            }
+            Operand::Register(_) => {
+                errors.push(make_error(
+                    source,
+                    span,
+                    "cannot use register as value".into(),
+                ));
+                0
+            }
+            Operand::String(_) => {
+                errors.push(make_error(
+                    source,
+                    span,
+                    "cannot use string as value".into(),
+                ));
+                0
+            }
+        }
     }
 
-    fn emit_instruction(&self, instr: &Instruction, pc: u16) -> Result<u16, AssemblyError> {
+    fn resolve_label(
+        &self,
+        label: &Spanned<String>,
+        pc: u16,
+        source: &str,
+        errors: &mut Vec<SemanticError>,
+    ) -> i16 {
+        if let Some(&addr) = self.symbols.get(&label.value) {
+            addr.wrapping_sub(pc + 1) as i16
+        } else {
+            errors.push(make_error(
+                source,
+                label.span.clone(),
+                format!("undefined symbol: {}", label.value),
+            ));
+            0
+        }
+    }
+
+    fn emit_instruction(
+        &self,
+        instr: &Instruction,
+        pc: u16,
+        source: &str,
+        span: Span,
+        errors: &mut Vec<SemanticError>,
+    ) -> u16 {
         use Instruction::*;
-        Ok(match instr {
-            Add { dr, sr1, src2 } => self.emit_alu(0b0001, *dr, *sr1, src2)?,
-            And { dr, sr1, src2 } => self.emit_alu(0b0101, *dr, *sr1, src2)?,
+        match instr {
+            Add { dr, sr1, src2 } => self.emit_alu(0b0001, *dr, *sr1, src2, source, span, errors),
+            And { dr, sr1, src2 } => self.emit_alu(0b0101, *dr, *sr1, src2, source, span, errors),
             Not { dr, sr } => (0b1001 << 12) | (dr.0 as u16) << 9 | (sr.0 as u16) << 6 | 0x3F,
-            Br { n, z, p, label } => self.emit_br(*n, *z, *p, label, pc)?,
+            Br { n, z, p, label } => self.emit_br(*n, *z, *p, label, pc, source, errors),
             Jmp { base } => (0b1100 << 12) | (base.0 as u16) << 6,
             Ret => 0xC1C0,
-            Jsr { label } => self.emit_jsr(label, pc)?,
+            Jsr { label } => self.emit_jsr(label, pc, source, errors),
             Jsrr { base } => (0b0100 << 12) | (base.0 as u16) << 6,
-            Ld { dr, label } => self.emit_pc_offset(0b0010, dr.0, label, pc, 9)?,
-            Ldi { dr, label } => self.emit_pc_offset(0b1010, dr.0, label, pc, 9)?,
-            Ldr { dr, base, offset } => self.emit_base_offset(0b0110, dr.0, base.0, *offset)?,
-            Lea { dr, label } => self.emit_pc_offset(0b1110, dr.0, label, pc, 9)?,
-            St { sr, label } => self.emit_pc_offset(0b0011, sr.0, label, pc, 9)?,
-            Sti { sr, label } => self.emit_pc_offset(0b1011, sr.0, label, pc, 9)?,
-            Str { sr, base, offset } => self.emit_base_offset(0b0111, sr.0, base.0, *offset)?,
+            Ld { dr, label } => self.emit_pc_offset(0b0010, dr.0, label, pc, 9, source, errors),
+            Ldi { dr, label } => self.emit_pc_offset(0b1010, dr.0, label, pc, 9, source, errors),
+            Ldr { dr, base, offset } => {
+                self.emit_base_offset(0b0110, dr.0, base.0, *offset, source, span, errors)
+            }
+            Lea { dr, label } => self.emit_pc_offset(0b1110, dr.0, label, pc, 9, source, errors),
+            St { sr, label } => self.emit_pc_offset(0b0011, sr.0, label, pc, 9, source, errors),
+            Sti { sr, label } => self.emit_pc_offset(0b1011, sr.0, label, pc, 9, source, errors),
+            Str { sr, base, offset } => {
+                self.emit_base_offset(0b0111, sr.0, base.0, *offset, source, span, errors)
+            }
             Trap { trapvect } => 0xF000 | (*trapvect as u16),
             Getc => 0xF020,
             Out => 0xF021,
@@ -233,7 +312,7 @@ impl Assembler {
             Putsp => 0xF024,
             Halt => 0xF025,
             Rti => 0x8000,
-        })
+        }
     }
 
     fn emit_alu<T: AluSrc2>(
@@ -242,9 +321,12 @@ impl Assembler {
         dr: Register,
         sr1: Register,
         src2: &T,
-    ) -> Result<u16, AssemblyError> {
+        source: &str,
+        span: Span,
+        errors: &mut Vec<SemanticError>,
+    ) -> u16 {
         let base = (op << 12) | (dr.0 as u16) << 9 | (sr1.0 as u16) << 6;
-        src2.encode(base)
+        src2.encode(base, source, span, errors)
     }
 
     fn emit_br(
@@ -254,16 +336,24 @@ impl Assembler {
         p: bool,
         label: &Spanned<String>,
         pc: u16,
-    ) -> Result<u16, AssemblyError> {
-        let offset = self.resolve_label(&label.value, pc)?;
-        check_offset(offset, 9, "BR")?;
-        Ok((n as u16) << 11 | (z as u16) << 10 | (p as u16) << 9 | (offset as u16 & 0x1FF))
+        source: &str,
+        errors: &mut Vec<SemanticError>,
+    ) -> u16 {
+        let offset = self.resolve_label(label, pc, source, errors);
+        check_offset(offset, 9, "BR", source, label.span.clone(), errors);
+        (n as u16) << 11 | (z as u16) << 10 | (p as u16) << 9 | (offset as u16 & 0x1FF)
     }
 
-    fn emit_jsr(&self, label: &Spanned<String>, pc: u16) -> Result<u16, AssemblyError> {
-        let offset = self.resolve_label(&label.value, pc)?;
-        check_offset(offset, 11, "JSR")?;
-        Ok((0b0100 << 12) | (1 << 11) | (offset as u16 & 0x7FF))
+    fn emit_jsr(
+        &self,
+        label: &Spanned<String>,
+        pc: u16,
+        source: &str,
+        errors: &mut Vec<SemanticError>,
+    ) -> u16 {
+        let offset = self.resolve_label(label, pc, source, errors);
+        check_offset(offset, 11, "JSR", source, label.span.clone(), errors);
+        (0b0100 << 12) | (1 << 11) | (offset as u16 & 0x7FF)
     }
 
     fn emit_pc_offset(
@@ -273,11 +363,20 @@ impl Assembler {
         label: &Spanned<String>,
         pc: u16,
         bits: u8,
-    ) -> Result<u16, AssemblyError> {
-        let offset = self.resolve_label(&label.value, pc)?;
-        check_offset(offset, bits, op_name(op))?;
+        source: &str,
+        errors: &mut Vec<SemanticError>,
+    ) -> u16 {
+        let offset = self.resolve_label(label, pc, source, errors);
+        check_offset(
+            offset,
+            bits,
+            op_name(op),
+            source,
+            label.span.clone(),
+            errors,
+        );
         let mask = (1u16 << bits) - 1;
-        Ok((op << 12) | (reg as u16) << 9 | (offset as u16 & mask))
+        (op << 12) | (reg as u16) << 9 | (offset as u16 & mask)
     }
 
     fn emit_base_offset(
@@ -286,66 +385,130 @@ impl Assembler {
         reg: u8,
         base: u8,
         offset: i8,
-    ) -> Result<u16, AssemblyError> {
+        source: &str,
+        span: Span,
+        errors: &mut Vec<SemanticError>,
+    ) -> u16 {
         if !(-32..=31).contains(&offset) {
-            return Err(AssemblyError::SemanticError {
-                message: format!("{} offset out of range (-32 to 31)", op_name(op)),
-                line: None,
-            });
+            errors.push(make_error(
+                source,
+                span,
+                format!("{} offset out of range (-32 to 31)", op_name(op)),
+            ));
         }
-        Ok((op << 12) | (reg as u16) << 9 | (base as u16) << 6 | (offset as u16 & 0x3F))
+        (op << 12) | (reg as u16) << 9 | (base as u16) << 6 | (offset as u16 & 0x3F)
     }
 }
 
 trait AluSrc2 {
-    fn encode(&self, base: u16) -> Result<u16, AssemblyError>;
+    fn encode(&self, base: u16, source: &str, span: Span, errors: &mut Vec<SemanticError>) -> u16;
 }
 
 impl AluSrc2 for AddSrc2 {
-    fn encode(&self, base: u16) -> Result<u16, AssemblyError> {
+    fn encode(&self, base: u16, source: &str, span: Span, errors: &mut Vec<SemanticError>) -> u16 {
         match self {
-            AddSrc2::Register(r) => Ok(base | r.0 as u16),
+            AddSrc2::Register(r) => base | r.0 as u16,
             AddSrc2::Immediate(imm) => {
                 if *imm < -16 || *imm > 15 {
-                    return Err(AssemblyError::SemanticError {
-                        message: "immediate value out of range (-16 to 15)".into(),
-                        line: None,
-                    });
+                    errors.push(make_error(
+                        source,
+                        span,
+                        "immediate value out of range (-16 to 15)".into(),
+                    ));
                 }
-                Ok(base | (1 << 5) | (*imm as u16 & 0x1F))
+                base | (1 << 5) | (*imm as u16 & 0x1F)
             }
         }
     }
 }
 
 impl AluSrc2 for AndSrc2 {
-    fn encode(&self, base: u16) -> Result<u16, AssemblyError> {
+    fn encode(&self, base: u16, source: &str, span: Span, errors: &mut Vec<SemanticError>) -> u16 {
         match self {
-            AndSrc2::Register(r) => Ok(base | r.0 as u16),
+            AndSrc2::Register(r) => base | r.0 as u16,
             AndSrc2::Immediate(imm) => {
                 if *imm < -16 || *imm > 15 {
-                    return Err(AssemblyError::SemanticError {
-                        message: "immediate value out of range (-16 to 15)".into(),
-                        line: None,
-                    });
+                    errors.push(make_error(
+                        source,
+                        span,
+                        "immediate value out of range (-16 to 15)".into(),
+                    ));
                 }
-                Ok(base | (1 << 5) | (*imm as u16 & 0x1F))
+                base | (1 << 5) | (*imm as u16 & 0x1F)
             }
         }
     }
 }
 
-fn check_offset(offset: i16, bits: u8, op: &str) -> Result<(), AssemblyError> {
+fn check_offset(
+    offset: i16,
+    bits: u8,
+    op: &str,
+    source: &str,
+    span: Span,
+    errors: &mut Vec<SemanticError>,
+) {
     let max = (1 << (bits - 1)) - 1;
     let min = -(1 << (bits - 1));
     if offset < min || offset > max {
-        Err(AssemblyError::SemanticError {
-            message: format!("{op} offset out of range ({min} to {max})"),
-            line: None,
-        })
-    } else {
-        Ok(())
+        errors.push(make_error(
+            source,
+            span,
+            format!("{op} offset out of range ({min} to {max})"),
+        ));
     }
+}
+
+/// Convert a byte offset to (line, column) in source.
+fn offset_to_pos(source: &str, offset: usize) -> (usize, usize) {
+    let mut line = 1;
+    let mut col = 1;
+    for (i, c) in source.chars().enumerate() {
+        if i >= offset {
+            break;
+        }
+        if c == '\n' {
+            line += 1;
+            col = 1;
+        } else {
+            col += 1;
+        }
+    }
+    (line, col)
+}
+
+/// Create a semantic error from a span.
+fn make_error(source: &str, span: Span, message: String) -> SemanticError {
+    let (line, column) = offset_to_pos(source, span.start);
+    SemanticError {
+        message,
+        line,
+        column,
+        span,
+    }
+}
+
+/// Format semantic errors with source context for pretty display.
+pub fn format_semantic_errors(filename: &str, source: &str, errors: &[SemanticError]) -> String {
+    use ariadne::{Color, Label, Report, ReportKind, Source};
+
+    let mut output = Vec::new();
+    for error in errors {
+        Report::<(&str, std::ops::Range<usize>)>::build(
+            ReportKind::Error,
+            (filename, error.span.clone()),
+        )
+        .with_message(&error.message)
+        .with_label(
+            Label::new((filename, error.span.clone()))
+                .with_message(&error.message)
+                .with_color(Color::Red),
+        )
+        .finish()
+        .write((filename, Source::from(source)), &mut output)
+        .unwrap();
+    }
+    String::from_utf8(output).unwrap_or_else(|_| "error formatting output".into())
 }
 
 const fn op_name(op: u16) -> &'static str {

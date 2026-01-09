@@ -5,3 +5,4 @@ edition = "2024"
 
 [dependencies]
 lc3-parser = { path = "../lc3-parser" }
+ariadne = "0.6"
