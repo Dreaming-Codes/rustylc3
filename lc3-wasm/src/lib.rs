@@ -250,7 +250,7 @@ pub fn assemble_to_bytes(source: &str, origin: u16) -> Result<Vec<u8>, JsError> 
 /// Initialize the WASM module.
 #[wasm_bindgen(start)]
 pub fn init() {
-    // Placeholder for future initialization if needed
+    console_error_panic_hook::set_once();
 }
 
 // ============================================================================
