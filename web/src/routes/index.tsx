@@ -1,11 +1,13 @@
-import { createFileRoute } from '@tanstack/react-router'
+import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useEffect } from 'react'
+import { useStore } from '@tanstack/react-store'
 import {
   Panel,
   Group as PanelGroup,
   Separator as PanelResizeHandle,
 } from 'react-resizable-panels'
-import { Cpu, Code2, Github } from 'lucide-react'
+import { Cpu, Code2, Github, PanelLeftClose, PanelLeft } from 'lucide-react'
+import { toast } from 'sonner'
 
 import { LC3Editor } from '@/components/LC3Editor'
 import { RegistersPanel } from '@/components/RegistersPanel'
@@ -13,27 +15,67 @@ import { ControlPanel } from '@/components/ControlPanel'
 import { ConsolePanel } from '@/components/ConsolePanel'
 import { MemoryPanel } from '@/components/MemoryPanel'
 import { FileToolbar } from '@/components/FileToolbar'
+import { FileBrowser } from '@/components/FileBrowser'
 import { initWasm } from '@/lib/lc3-store'
-import { initFileManager, saveCurrentFile } from '@/lib/file-manager'
+import { initFileManager, saveCurrentFile, fileManagerStore, toggleSidebar, loadSharedCode } from '@/lib/file-manager'
 import { Button } from '@/components/ui/button'
 
 export const Route = createFileRoute('/')({
+  validateSearch: (search: Record<string, unknown>) => {
+    return {
+      code: typeof search.code === 'string' ? search.code : undefined,
+    }
+  },
   component: IDE,
 })
 
 function IDE() {
+  const isSidebarOpen = useStore(fileManagerStore, (s) => s.isSidebarOpen)
+  const { code } = Route.useSearch()
+  const navigate = useNavigate()
+
   // Initialize WASM and file manager on mount
   useEffect(() => {
-    initWasm()
-    initFileManager()
+    const init = async () => {
+      await initWasm()
+      initFileManager()
+    }
+    init()
   }, [])
+
+  // Handle shared code from URL (separate effect to run after WASM is ready)
+  useEffect(() => {
+    if (!code) return
+    
+    const loadCode = async () => {
+      // Ensure WASM is ready
+      await initWasm()
+      
+      try {
+        // URL decode first, then base64 decode
+        const urlDecoded = decodeURIComponent(code)
+        const decoded = atob(urlDecoded)
+        loadSharedCode(decoded)
+        // Clear the URL param
+        navigate({ to: '/', search: { code: undefined }, replace: true })
+      } catch (e) {
+        console.error('Failed to decode shared content', e, 'code:', code)
+      }
+    }
+    loadCode()
+  }, [code, navigate])
 
   // Keyboard shortcuts
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
+    const handleKeyDown = async (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 's') {
         e.preventDefault()
-        saveCurrentFile()
+        await saveCurrentFile()
+        toast.success('File saved')
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key === 'b') {
+        e.preventDefault()
+        toggleSidebar()
       }
     }
 
@@ -41,11 +83,26 @@ function IDE() {
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [])
 
+  // Show sidebar if isSidebarOpen is true
+  const showSidebar = isSidebarOpen
+
   return (
     <div className="flex h-full flex-col">
       {/* Header */}
       <header className="flex h-12 flex-shrink-0 items-center justify-between border-b border-zinc-800 bg-zinc-900/50 px-4">
         <div className="flex items-center gap-3">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={toggleSidebar}
+            className="h-8 w-8 p-0 text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800"
+          >
+            {isSidebarOpen ? (
+              <PanelLeftClose className="h-4 w-4" />
+            ) : (
+              <PanelLeft className="h-4 w-4" />
+            )}
+          </Button>
           <div className="flex items-center gap-2">
             <Cpu className="h-5 w-5 text-blue-400" />
             <h1 className="text-lg font-semibold text-zinc-100">
@@ -75,8 +132,15 @@ function IDE() {
       </header>
 
       {/* Main content */}
-      <main className="flex-1 overflow-hidden p-2">
-        <PanelGroup orientation="horizontal" className="h-full">
+      <main className="flex flex-1 overflow-hidden p-2">
+        {/* File Browser Sidebar - fixed width, outside PanelGroup */}
+        {showSidebar && (
+          <div className="mr-2 h-full w-52 flex-shrink-0">
+            <FileBrowser />
+          </div>
+        )}
+
+        <PanelGroup orientation="horizontal" className="h-full flex-1">
           {/* Left: Editor */}
           <Panel defaultSize={55} minSize={30}>
             <div className="flex h-full flex-col gap-2">
@@ -92,7 +156,7 @@ function IDE() {
             </div>
           </Panel>
 
-          <PanelResizeHandle className="mx-1" />
+          <PanelResizeHandle className="mx-0.5 w-1 rounded bg-zinc-800 transition-colors hover:bg-zinc-600 active:bg-blue-500" />
 
           {/* Right: Controls, Registers, Console, Memory */}
           <Panel defaultSize={45} minSize={25}>
@@ -111,7 +175,7 @@ function IDE() {
                 </div>
               </Panel>
 
-              <PanelResizeHandle className="my-1" />
+              <PanelResizeHandle className="my-0.5 h-1 rounded bg-zinc-800 transition-colors hover:bg-zinc-600 active:bg-blue-500" />
 
               {/* Bottom: Console + Memory */}
               <Panel defaultSize={55} minSize={20}>

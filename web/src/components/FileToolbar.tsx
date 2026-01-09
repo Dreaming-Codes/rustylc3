@@ -1,38 +1,31 @@
 import { useStore } from '@tanstack/react-store'
-import { useLiveQuery } from '@tanstack/react-db'
 import { useState, useCallback } from 'react'
+import { toast } from 'sonner'
 import {
   File,
   FolderOpen,
   Save,
   Share2,
   ChevronDown,
-  Trash2,
   FilePlus,
-  Check,
   HardDrive,
 } from 'lucide-react'
 import {
   fileManagerStore,
   openFile,
+  openFolder,
   saveCurrentFile,
   saveFileAs,
   newFile,
-  openStoredFile,
-  deleteStoredFile,
   shareFile,
   renameCurrentFile,
 } from '@/lib/file-manager'
-import { filesCollection } from '@/lib/file-storage'
-import type { StoredFile } from '@/lib/file-storage'
-import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-  DropdownMenuLabel,
 } from '@/components/ui/dropdown-menu'
 import {
   Tooltip,
@@ -40,25 +33,18 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
-import { cn } from '@/lib/utils'
+import { Button } from '@/components/ui/button'
 
 export function FileToolbar() {
   const currentFileName = useStore(fileManagerStore, (s) => s.currentFileName)
   const hasUnsavedChanges = useStore(fileManagerStore, (s) => s.hasUnsavedChanges)
-  const currentFileId = useStore(fileManagerStore, (s) => s.currentFileId)
   const currentFileHandle = useStore(fileManagerStore, (s) => s.currentFileHandle)
   const supportsFileSystemAccess = useStore(fileManagerStore, (s) => s.supportsFileSystemAccess)
-
-  // Live query for stored files
-  const { data: storedFiles } = useLiveQuery((q) =>
-    q.from({ file: filesCollection })
-     .orderBy(({ file }) => file.updatedAt, 'desc')
-     .select(({ file }) => file)
-  )
+  const supportsDirectoryPicker = useStore(fileManagerStore, (s) => s.supportsDirectoryPicker)
+  const currentFileId = useStore(fileManagerStore, (s) => s.currentFileId)
 
   const [isRenaming, setIsRenaming] = useState(false)
   const [renameValue, setRenameValue] = useState('')
-  const [shareTooltip, setShareTooltip] = useState('Share')
 
   const handleRenameStart = useCallback(() => {
     setRenameValue(currentFileName)
@@ -84,30 +70,24 @@ export function FileToolbar() {
   )
 
   const handleShare = useCallback(() => {
-    shareFile()
-    setShareTooltip('Copied!')
-    setTimeout(() => setShareTooltip('Share'), 2000)
+    const url = shareFile()
+    toast.success('Share link copied to clipboard!', {
+      description: 'Anyone with this link can view your code',
+      action: {
+        label: 'Open',
+        onClick: () => window.open(url, '_blank'),
+      },
+    })
   }, [])
 
-  const handleSave = useCallback(() => {
-    saveCurrentFile()
+  const handleSave = useCallback(async () => {
+    await saveCurrentFile()
+    toast.success('File saved')
   }, [])
 
   const handleSaveAs = useCallback(() => {
     saveFileAs()
   }, [])
-
-  const formatDate = (timestamp: number) => {
-    const date = new Date(timestamp)
-    return date.toLocaleDateString(undefined, {
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    })
-  }
-
-  const files = (storedFiles ?? []) as StoredFile[]
 
   return (
     <TooltipProvider>
@@ -131,9 +111,15 @@ export function FileToolbar() {
               New File
             </DropdownMenuItem>
             <DropdownMenuItem onClick={openFile}>
-              <FolderOpen className="mr-2 h-4 w-4" />
-              Open...
+              <File className="mr-2 h-4 w-4" />
+              Open File...
             </DropdownMenuItem>
+            {supportsDirectoryPicker && (
+              <DropdownMenuItem onClick={openFolder}>
+                <FolderOpen className="mr-2 h-4 w-4" />
+                Open Folder...
+              </DropdownMenuItem>
+            )}
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={handleSave}>
               <Save className="mr-2 h-4 w-4" />
@@ -150,49 +136,6 @@ export function FileToolbar() {
             <DropdownMenuItem onClick={handleRenameStart}>
               Rename...
             </DropdownMenuItem>
-
-            {/* Stored files section */}
-            {files.length > 0 && (
-              <>
-                <DropdownMenuSeparator />
-                <DropdownMenuLabel className="flex items-center gap-2 text-zinc-500">
-                  <HardDrive className="h-3.5 w-3.5" />
-                  Browser Storage
-                </DropdownMenuLabel>
-                {files.slice(0, 5).map((file) => (
-                  <DropdownMenuItem
-                    key={file.id}
-                    onClick={() => openStoredFile(file.id)}
-                    className="group flex items-center justify-between"
-                  >
-                    <div className="flex items-center gap-2 truncate">
-                      {file.id === currentFileId && (
-                        <Check className="h-3.5 w-3.5 text-green-500" />
-                      )}
-                      <span className={cn(file.id !== currentFileId && 'ml-5.5')}>
-                        {file.name}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-zinc-600">
-                        {formatDate(file.updatedAt)}
-                      </span>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-5 w-5 p-0 opacity-0 group-hover:opacity-100"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          deleteStoredFile(file.id)
-                        }}
-                      >
-                        <Trash2 className="h-3.5 w-3.5 text-red-500" />
-                      </Button>
-                    </div>
-                  </DropdownMenuItem>
-                ))}
-              </>
-            )}
           </DropdownMenuContent>
         </DropdownMenu>
 
@@ -256,7 +199,7 @@ export function FileToolbar() {
                 <Share2 className="h-4 w-4" />
               </Button>
             </TooltipTrigger>
-            <TooltipContent>{shareTooltip}</TooltipContent>
+            <TooltipContent>Share</TooltipContent>
           </Tooltip>
         </div>
       </div>

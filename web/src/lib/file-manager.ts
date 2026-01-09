@@ -2,6 +2,7 @@
  * File manager for handling file operations including:
  * - Browser storage (TanStack DB)
  * - File System Access API (Chrome/Edge)
+ * - Folder support
  * - Fallback download/upload
  * - URL sharing via base64
  */
@@ -26,21 +27,47 @@ declare global {
       suggestedName?: string
       types?: { description: string; accept: Record<string, string[]> }[]
     }) => Promise<FileSystemFileHandle>
+    showDirectoryPicker?: (options?: {
+      mode?: 'read' | 'readwrite'
+    }) => Promise<FileSystemDirectoryHandle>
   }
+}
+
+// Extended types for File System Access API
+interface FSDirectoryHandle extends FileSystemDirectoryHandle {
+  values(): AsyncIterableIterator<FileSystemHandle & { kind: 'file' | 'directory'; name: string }>
+}
+
+export interface FolderFile {
+  name: string
+  path: string
+  handle: FileSystemFileHandle
+}
+
+export interface OpenFolder {
+  name: string
+  handle: FileSystemDirectoryHandle
+  files: FolderFile[]
 }
 
 export interface FileManagerState {
   // Currently open file
   currentFileId: string | null
   currentFileName: string
-  currentFileHandle: FileSystemFileHandle | null // For File System Access API
+  currentFileHandle: FileSystemFileHandle | null
+  currentFilePath: string | null // For folder files
+  
+  // Open folder state
+  openFolder: OpenFolder | null
   
   // UI state
   isLoading: boolean
   hasUnsavedChanges: boolean
+  isSidebarOpen: boolean
   
   // Feature detection
   supportsFileSystemAccess: boolean
+  supportsDirectoryPicker: boolean
 }
 
 const DEFAULT_FILE_NAME = 'untitled.asm'
@@ -49,9 +76,13 @@ export const fileManagerStore = new Store<FileManagerState>({
   currentFileId: null,
   currentFileName: DEFAULT_FILE_NAME,
   currentFileHandle: null,
+  currentFilePath: null,
+  openFolder: null,
   isLoading: false,
   hasUnsavedChanges: false,
+  isSidebarOpen: true,
   supportsFileSystemAccess: typeof window !== 'undefined' && 'showOpenFilePicker' in window,
+  supportsDirectoryPicker: typeof window !== 'undefined' && 'showDirectoryPicker' in window,
 })
 
 // File type options for File System Access API
@@ -65,7 +96,7 @@ const filePickerOptions = {
 }
 
 /**
- * Initialize file manager - check URL for shared content and set up change tracking
+ * Initialize file manager - set up change tracking
  */
 export async function initFileManager() {
   fileManagerStore.setState((s) => ({ ...s, isLoading: true }))
@@ -75,31 +106,22 @@ export async function initFileManager() {
     fileManagerStore.setState((s) => ({ ...s, hasUnsavedChanges: true }))
   })
 
-  try {
-    // Check URL for shared content
-    const urlParams = new URLSearchParams(window.location.search)
-    const sharedContent = urlParams.get('code')
-    
-    if (sharedContent) {
-      try {
-        const decoded = atob(sharedContent)
-        updateSourceCode(decoded, false)
-        fileManagerStore.setState((s) => ({
-          ...s,
-          currentFileId: null,
-          currentFileName: 'shared.asm',
-          currentFileHandle: null,
-          hasUnsavedChanges: true,
-        }))
-        // Clear URL without reload
-        window.history.replaceState({}, '', window.location.pathname)
-      } catch {
-        console.error('Failed to decode shared content')
-      }
-    }
-  } finally {
-    fileManagerStore.setState((s) => ({ ...s, isLoading: false }))
-  }
+  fileManagerStore.setState((s) => ({ ...s, isLoading: false }))
+}
+
+/**
+ * Load shared code from URL parameter
+ */
+export function loadSharedCode(code: string) {
+  updateSourceCode(code, false)
+  fileManagerStore.setState((s) => ({
+    ...s,
+    currentFileId: null,
+    currentFileName: 'shared.asm',
+    currentFileHandle: null,
+    currentFilePath: null,
+    hasUnsavedChanges: true,
+  }))
 }
 
 /**
@@ -122,6 +144,7 @@ export function newFile() {
     currentFileId: null,
     currentFileName: DEFAULT_FILE_NAME,
     currentFileHandle: null,
+    currentFilePath: null,
     hasUnsavedChanges: false,
   }))
 }
@@ -144,10 +167,10 @@ export async function openFile() {
         currentFileId: null,
         currentFileName: file.name,
         currentFileHandle: handle,
+        currentFilePath: null,
         hasUnsavedChanges: false,
       }))
     } catch (err) {
-      // User cancelled or error
       if ((err as Error).name !== 'AbortError') {
         console.error('Failed to open file:', err)
       }
@@ -169,11 +192,194 @@ export async function openFile() {
         currentFileId: null,
         currentFileName: file.name,
         currentFileHandle: null,
+        currentFilePath: null,
         hasUnsavedChanges: false,
       }))
     }
     
     input.click()
+  }
+}
+
+/**
+ * Open a folder using File System Access API
+ */
+export async function openFolder() {
+  if (!window.showDirectoryPicker) {
+    console.error('Directory picker not supported')
+    return
+  }
+
+  try {
+    const dirHandle = await window.showDirectoryPicker({ mode: 'readwrite' })
+    const files = await scanDirectory(dirHandle)
+    
+    fileManagerStore.setState((s) => ({
+      ...s,
+      openFolder: {
+        name: dirHandle.name,
+        handle: dirHandle,
+        files,
+      },
+      isSidebarOpen: true,
+    }))
+
+    // Open first .asm file if any
+    const firstAsm = files.find(f => f.name.endsWith('.asm') || f.name.endsWith('.lc3'))
+    if (firstAsm) {
+      await openFolderFile(firstAsm.path)
+    }
+  } catch (err) {
+    if ((err as Error).name !== 'AbortError') {
+      console.error('Failed to open folder:', err)
+    }
+  }
+}
+
+/**
+ * Scan directory for .asm and .lc3 files
+ */
+async function scanDirectory(dirHandle: FileSystemDirectoryHandle, basePath = ''): Promise<FolderFile[]> {
+  const files: FolderFile[] = []
+  
+  // Cast to extended type for values() method
+  const dir = dirHandle as FSDirectoryHandle
+  
+  for await (const entry of dir.values()) {
+    const path = basePath ? `${basePath}/${entry.name}` : entry.name
+    
+    if (entry.kind === 'file') {
+      if (entry.name.endsWith('.asm') || entry.name.endsWith('.lc3')) {
+        files.push({
+          name: entry.name,
+          path,
+          handle: entry as FileSystemFileHandle,
+        })
+      }
+    } else if (entry.kind === 'directory') {
+      // Recursively scan subdirectories
+      const subFiles = await scanDirectory(entry as FileSystemDirectoryHandle, path)
+      files.push(...subFiles)
+    }
+  }
+  
+  return files.sort((a, b) => a.path.localeCompare(b.path))
+}
+
+/**
+ * Refresh the open folder
+ */
+export async function refreshFolder() {
+  const { openFolder } = fileManagerStore.state
+  if (!openFolder) return
+
+  const files = await scanDirectory(openFolder.handle)
+  fileManagerStore.setState((s) => ({
+    ...s,
+    openFolder: s.openFolder ? { ...s.openFolder, files } : null,
+  }))
+}
+
+/**
+ * Close the open folder
+ */
+export function closeFolder() {
+  fileManagerStore.setState((s) => ({
+    ...s,
+    openFolder: null,
+  }))
+}
+
+/**
+ * Open a file from the open folder
+ */
+export async function openFolderFile(path: string) {
+  const { openFolder } = fileManagerStore.state
+  if (!openFolder) return
+
+  const fileInfo = openFolder.files.find(f => f.path === path)
+  if (!fileInfo) return
+
+  try {
+    const file = await fileInfo.handle.getFile()
+    const content = await file.text()
+
+    updateSourceCode(content, false)
+    fileManagerStore.setState((s) => ({
+      ...s,
+      currentFileId: null,
+      currentFileName: fileInfo.name,
+      currentFileHandle: fileInfo.handle,
+      currentFilePath: path,
+      hasUnsavedChanges: false,
+    }))
+  } catch (err) {
+    console.error('Failed to open file:', err)
+  }
+}
+
+/**
+ * Create a new file in the open folder
+ */
+export async function createFileInFolder(fileName: string) {
+  const { openFolder } = fileManagerStore.state
+  if (!openFolder) return
+
+  // Ensure .asm extension
+  if (!fileName.endsWith('.asm') && !fileName.endsWith('.lc3')) {
+    fileName += '.asm'
+  }
+
+  try {
+    const handle = await openFolder.handle.getFileHandle(fileName, { create: true })
+    const writable = await handle.createWritable()
+    const defaultContent = `; ${fileName}
+; 
+
+        .ORIG x3000
+
+        ; Your code here
+        HALT
+
+        .END
+`
+    await writable.write(defaultContent)
+    await writable.close()
+
+    // Refresh folder and open the new file
+    await refreshFolder()
+    await openFolderFile(fileName)
+  } catch (err) {
+    console.error('Failed to create file:', err)
+  }
+}
+
+/**
+ * Delete a file from the open folder
+ */
+export async function deleteFileInFolder(path: string) {
+  const { openFolder, currentFilePath } = fileManagerStore.state
+  if (!openFolder) return
+
+  try {
+    // Find parent directory and file name
+    const parts = path.split('/')
+    const fileName = parts.pop()!
+    
+    let dirHandle = openFolder.handle
+    for (const part of parts) {
+      dirHandle = await dirHandle.getDirectoryHandle(part)
+    }
+    
+    await dirHandle.removeEntry(fileName)
+    await refreshFolder()
+
+    // If we deleted the current file, create a new one
+    if (currentFilePath === path) {
+      newFile()
+    }
+  } catch (err) {
+    console.error('Failed to delete file:', err)
   }
 }
 
@@ -239,8 +445,12 @@ export async function saveFileAs() {
         currentFileId: null,
         currentFileName: handle.name,
         currentFileHandle: handle,
+        currentFilePath: null,
         hasUnsavedChanges: false,
       }))
+      
+      // Refresh folder if open
+      await refreshFolder()
     } catch (err) {
       if ((err as Error).name !== 'AbortError') {
         console.error('Failed to save file:', err)
@@ -280,6 +490,7 @@ export function openStoredFile(id: string) {
     currentFileId: file.id,
     currentFileName: file.name,
     currentFileHandle: null,
+    currentFilePath: null,
     hasUnsavedChanges: false,
   }))
 }
@@ -314,6 +525,13 @@ export function renameCurrentFile(newName: string) {
   if (currentFileId) {
     updateFile(currentFileId, { name: newName })
   }
+}
+
+/**
+ * Toggle sidebar visibility
+ */
+export function toggleSidebar() {
+  fileManagerStore.setState((s) => ({ ...s, isSidebarOpen: !s.isSidebarOpen }))
 }
 
 /**
