@@ -41,7 +41,8 @@
     "sonner": "^2.0.7",
     "tailwind-merge": "^3.0.2",
     "tailwindcss": "^4.0.6",
-    "tw-animate-css": "^1.3.6"
+    "tw-animate-css": "^1.3.6",
+    "vite-plugin-pwa": "^1.2.0"
   },
   "devDependencies": {
     "@tanstack/devtools-event-client": "^0.3.2",
