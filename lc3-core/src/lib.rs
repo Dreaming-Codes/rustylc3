@@ -24,6 +24,17 @@ pub enum VMEvent {
     Halt,
     /// TRAP x20 (GETC) - read a character into R0. Caller must set R0 before next step.
     ReadChar,
+    /// An error occurred during execution.
+    Error(VMError),
+}
+
+/// Errors that can occur during VM execution.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum VMError {
+    /// Reserved/invalid opcode encountered.
+    ReservedOpcode(u8),
+    /// Unimplemented TRAP vector.
+    UnimplementedTrap(u8),
 }
 
 /// LC-3 Virtual Machine state.
@@ -92,12 +103,12 @@ impl LC3 {
             0b0111 => self.str(instr),
             0b1111 => return self.trap(instr),
             0b1000 => {} // RTI - no-op in user mode
-            op => panic!("reserved opcode: {op:#06b}"),
+            op => return VMEvent::Error(VMError::ReservedOpcode(op as u8)),
         }
         VMEvent::None
     }
 
-    /// Execute instructions until a trap event (I/O or HALT) occurs.
+    /// Execute instructions until a trap event (I/O or HALT) or error occurs.
     pub fn run(&mut self) -> VMEvent {
         loop {
             let instr = self.memory[self.pc as usize];
@@ -119,7 +130,7 @@ impl LC3 {
                 0b0111 => self.str(instr),
                 0b1111 => return self.trap(instr),
                 0b1000 => {} // RTI - no-op in user mode
-                op => panic!("reserved opcode: {op:#06b}"),
+                op => return VMEvent::Error(VMError::ReservedOpcode(op as u8)),
             }
         }
     }
@@ -234,7 +245,7 @@ impl LC3 {
                 VMEvent::OutputString(chars)
             }
             0x25 => VMEvent::Halt,
-            vec => panic!("unimplemented TRAP vector: {vec:#04x}"),
+            vec => VMEvent::Error(VMError::UnimplementedTrap(vec as u8)),
         }
     }
 
