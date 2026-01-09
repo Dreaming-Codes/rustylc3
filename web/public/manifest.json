@@ -1,6 +1,7 @@
 {
-  "short_name": "TanStack App",
-  "name": "Create TanStack App Sample",
+  "short_name": "LC-3 IDE",
+  "name": "LC-3 IDE - RustyLC3",
+  "description": "A modern, offline IDE for LC-3 assembly language",
   "icons": [
     {
       "src": "favicon.ico",
@@ -20,6 +21,6 @@
   ],
   "start_url": ".",
   "display": "standalone",
-  "theme_color": "#000000",
-  "background_color": "#ffffff"
+  "theme_color": "#0a0a0a",
+  "background_color": "#0a0a0a"
 }
