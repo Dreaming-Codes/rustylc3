@@ -1,6 +1,6 @@
 use clap::{Parser, Subcommand};
 use lc3_assembler::Assembler;
-use lc3_core::{LC3, VMEvent};
+use lc3_core::{LC3, VMError, VMEvent};
 use std::io::{self, Write};
 use std::{fs, process};
 
@@ -114,6 +114,16 @@ fn run(path: &str) {
                 if stdin.read_line(&mut buf).is_ok() {
                     vm.regs[0] = buf.chars().next().unwrap_or('\0') as u16;
                 }
+            }
+            VMEvent::Error(e) => {
+                let msg = match e {
+                    VMError::ReservedOpcode(op) => format!("Reserved opcode: {op:#06b}"),
+                    VMError::UnimplementedTrap(vec) => {
+                        format!("Unimplemented TRAP vector: {vec:#04x}")
+                    }
+                };
+                eprintln!("\nError at PC x{:04X}: {}", vm.pc.wrapping_sub(1), msg);
+                process::exit(1);
             }
         }
     }
