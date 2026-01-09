@@ -94,8 +94,8 @@ fn run(path: &str) {
     let mut stdout = io::stdout();
 
     loop {
-        match vm.step() {
-            VMEvent::None => {}
+        match vm.run() {
+            VMEvent::None => unreachable!(),
             VMEvent::Output(c) => {
                 print!("{}", c as char);
                 let _ = stdout.flush();

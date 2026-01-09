@@ -86,6 +86,33 @@ impl LC3 {
         VMEvent::None
     }
 
+    /// Execute instructions until a trap event (I/O or HALT) occurs.
+    pub fn run(&mut self) -> VMEvent {
+        loop {
+            let instr = self.memory[self.pc as usize];
+            self.pc = self.pc.wrapping_add(1);
+
+            match instr >> 12 {
+                0b0001 => self.add(instr),
+                0b0101 => self.and(instr),
+                0b1001 => self.not(instr),
+                0b0000 => self.br(instr),
+                0b1100 => self.jmp(instr),
+                0b0100 => self.jsr(instr),
+                0b0010 => self.ld(instr),
+                0b1010 => self.ldi(instr),
+                0b0110 => self.ldr(instr),
+                0b1110 => self.lea(instr),
+                0b0011 => self.st(instr),
+                0b1011 => self.sti(instr),
+                0b0111 => self.str(instr),
+                0b1111 => return self.trap(instr),
+                0b1000 => {} // RTI - no-op in user mode
+                op => panic!("reserved opcode: {op:#06b}"),
+            }
+        }
+    }
+
     fn add(&mut self, instr: u16) {
         let dr = ((instr >> 9) & 0x7) as usize;
         let sr1 = self.regs[((instr >> 6) & 0x7) as usize];
