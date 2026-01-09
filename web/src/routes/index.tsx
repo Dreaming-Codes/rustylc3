@@ -36,9 +36,6 @@ function IDE() {
               LC-3 <span className="text-blue-400">IDE</span>
             </h1>
           </div>
-          <span className="rounded bg-zinc-800 px-2 py-0.5 text-xs text-zinc-500">
-            WebAssembly
-          </span>
         </div>
         <div className="flex items-center gap-2">
           <Button
@@ -48,7 +45,7 @@ function IDE() {
             asChild
           >
             <a
-              href="https://github.com"
+              href="https://github.com/Dreaming-Codes/rustylc3"
               target="_blank"
               rel="noopener noreferrer"
             >
@@ -121,8 +118,8 @@ function IDE() {
 
       {/* Footer */}
       <footer className="flex h-6 flex-shrink-0 items-center justify-between border-t border-zinc-800 bg-zinc-900/50 px-4 text-xs text-zinc-600">
-        <span>LC-3 Virtual Machine - Rust + WebAssembly</span>
-        <span>Built with Monaco Editor</span>
+        <span>LC-3 Virtual Machine</span>
+        <span>Built with ❤️ by <a href="https://dreaming.codes" target="_blank">DreamingCodes</a></span>
       </footer>
     </div>
   )
