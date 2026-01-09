@@ -3,8 +3,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite --port 3000",
-    "build": "vite build && tsc",
+    "build:wasm": "wasm-pack build ../lc3-wasm --target web --out-dir ../web/src/wasm",
+    "dev": "bun run build:wasm && vite --port 3000",
+    "build": "bun run build:wasm && vite build && tsc",
     "preview": "vite preview",
     "test": "vitest run",
     "lint": "oxlint",
