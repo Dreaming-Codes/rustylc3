@@ -2,12 +2,16 @@
 
 A fast LC-3 virtual machine, assembler, and CLI written in Rust.
 
+**[Try the Online IDE](https://rustylc3.dreaming.codes)**
+
+![LC-3 IDE Screenshot](assets/screenshot.png)
+
 ## Features
 
 - LC-3 assembler with two-pass assembly
 - LC-3 virtual machine for program execution
 - Command-line interface for assembling and running programs
-- [SOON™️] A full-fledged in-browser IDE for experimenting with LC-3 that works completely offline
+- A full-fledged in-browser IDE for experimenting with LC-3 that works completely offline
 
 ## Benchmarks
 
