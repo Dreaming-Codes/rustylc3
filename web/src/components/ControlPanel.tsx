@@ -6,6 +6,7 @@ import {
   SkipForward,
   RotateCcw,
   Zap,
+  AlertTriangle,
 } from 'lucide-react'
 import {
   lc3Store,
@@ -37,7 +38,11 @@ export function ControlPanel() {
   const isAssembled = useStore(lc3Store, (s) => s.isAssembled)
   const stepSpeed = useStore(lc3Store, (s) => s.stepSpeed)
   const wasmReady = useStore(lc3Store, (s) => s.wasmReady)
+  const breakpoints = useStore(lc3Store, (s) => s.breakpoints)
   const currentLine = getCurrentLine()
+  
+  const hasBreakpoints = breakpoints.size > 0
+  const isInstantMode = stepSpeed === 0
 
   const handleAssemble = useCallback(() => {
     assemble()
@@ -77,6 +82,7 @@ export function ControlPanel() {
 
   // Speed display
   const getSpeedLabel = () => {
+    if (stepSpeed === 0) return 'Instant'
     if (stepSpeed <= 10) return 'Max Speed'
     if (stepSpeed <= 50) return 'Fast'
     if (stepSpeed <= 100) return 'Normal'
@@ -86,8 +92,8 @@ export function ControlPanel() {
 
   return (
     <TooltipProvider>
-      <Card className="border-zinc-800 bg-zinc-950/50 backdrop-blur">
-        <CardHeader className="pb-3">
+      <Card className="flex h-full flex-col border-zinc-800 bg-zinc-950/50 backdrop-blur">
+        <CardHeader className="flex-shrink-0 pb-3">
           <div className="flex items-center justify-between">
             <CardTitle className="text-sm font-medium text-zinc-300">
               Controls
@@ -103,9 +109,9 @@ export function ControlPanel() {
             </Badge>
           </div>
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent className="flex flex-1 flex-col pb-4">
           {/* Main controls */}
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-2 mb-4">
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button
@@ -182,37 +188,47 @@ export function ControlPanel() {
             </Tooltip>
           </div>
 
-          {/* Speed control */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-zinc-400">Step Speed</span>
-              <span className="text-xs font-mono text-zinc-500">
-                {getSpeedLabel()} ({stepSpeed}ms)
-              </span>
-            </div>
-            <Slider
-              value={[stepSpeed]}
-              onValueChange={handleSpeedChange}
-              min={1}
-              max={1000}
-              step={1}
-              className="w-full"
-            />
-            <div className="flex justify-between text-xs text-zinc-600">
-              <span>Fast</span>
-              <span>Slow</span>
-            </div>
-          </div>
-
           {/* Current line indicator */}
           {currentLine && (
-            <div className="flex items-center gap-2 text-xs text-zinc-500">
+            <div className="mb-4 flex items-center gap-2 text-xs text-zinc-500">
               <span>Current Line:</span>
               <Badge variant="outline" className="font-mono">
                 {currentLine}
               </Badge>
             </div>
           )}
+
+          {/* Spacer to push speed control to bottom */}
+          <div className="flex-1" />
+
+          {/* Speed control */}
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-zinc-400">Step Speed</span>
+              <span className="text-xs font-mono text-zinc-500">
+                {getSpeedLabel()}{stepSpeed > 0 && ` (${stepSpeed}ms)`}
+              </span>
+            </div>
+            <Slider
+              value={[stepSpeed]}
+              onValueChange={handleSpeedChange}
+              min={0}
+              max={1000}
+              step={1}
+              className="w-full"
+            />
+            <div className="flex justify-between text-xs text-zinc-600">
+              <span>Instant</span>
+              <span>Slow</span>
+            </div>
+            {/* Warning for instant mode with breakpoints */}
+            {isInstantMode && hasBreakpoints && (
+              <div className="mt-2 flex items-center gap-1.5 rounded-md bg-yellow-500/10 px-2 py-1.5 text-xs text-yellow-500">
+                <AlertTriangle className="h-3.5 w-3.5 flex-shrink-0" />
+                <span>Breakpoints ignored in instant mode</span>
+              </div>
+            )}
+          </div>
         </CardContent>
       </Card>
     </TooltipProvider>

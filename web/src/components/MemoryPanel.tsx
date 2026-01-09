@@ -130,7 +130,7 @@ export function MemoryPanel() {
         <ScrollArea className="flex-1 rounded-md bg-black/30">
           <div className="p-2">
             {/* Header */}
-            <div className="mb-1 grid grid-cols-[4rem_1fr_4rem] gap-2 text-xs font-medium text-zinc-500">
+            <div className="mb-1 grid grid-cols-3 gap-2 text-xs font-medium text-zinc-500">
               <span>Addr</span>
               <span>Value</span>
               <span>Char</span>
@@ -149,7 +149,7 @@ export function MemoryPanel() {
                 <div
                   key={addr}
                   className={cn(
-                    'grid grid-cols-[4rem_1fr_4rem] gap-2 rounded px-1 py-0.5 font-mono text-xs transition-colors',
+                    'grid grid-cols-3 gap-2 rounded px-1 py-0.5 font-mono text-xs transition-colors',
                     isPC && 'bg-blue-500/20 ring-1 ring-blue-500/50'
                   )}
                 >

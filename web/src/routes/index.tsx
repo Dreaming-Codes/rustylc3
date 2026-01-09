@@ -99,14 +99,14 @@ function IDE() {
               <Panel defaultSize={55} minSize={20}>
                 <PanelGroup orientation="horizontal" className="h-full">
                   {/* Console */}
-                  <Panel defaultSize={60} minSize={30}>
+                  <Panel defaultSize={45} minSize={25}>
                     <ConsolePanel />
                   </Panel>
 
                   <PanelResizeHandle className="mx-1" />
 
                   {/* Memory */}
-                  <Panel defaultSize={40} minSize={25}>
+                  <Panel defaultSize={55} minSize={30}>
                     <MemoryPanel />
                   </Panel>
                 </PanelGroup>

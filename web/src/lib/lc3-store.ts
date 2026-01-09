@@ -96,8 +96,10 @@ export const lc3Store = new Store<LC3State>({
 let wasmModule: typeof import('@/wasm/lc3_wasm') | null = null
 let vm: InstanceType<typeof import('@/wasm/lc3_wasm').WasmLC3> | null = null
 
-// Auto-run interval
+// Auto-run interval/animation frame
 let autoRunInterval: ReturnType<typeof setInterval> | null = null
+let autoRunRAF: number | null = null
+let wasInstantMode = false
 
 // Promise to track ongoing initialization
 let initPromise: Promise<void> | null = null
@@ -361,8 +363,9 @@ export function provideInput(char: string) {
     consoleOutput: s.consoleOutput + char,
   }))
 
-  // Resume if was running
-  if (lc3Store.state.isRunning) {
+  // Resume if was running (including instant mode)
+  if (lc3Store.state.isRunning || wasInstantMode) {
+    lc3Store.setState((s) => ({ ...s, isRunning: true }))
     startAutoRun()
   }
 }
@@ -390,34 +393,58 @@ export function toggleBreakpoint(line: number) {
 }
 
 function startAutoRun() {
-  if (autoRunInterval) return
+  if (autoRunInterval || autoRunRAF) return
 
   // Track the starting PC to skip the breakpoint we're currently on
   const startingPC = lc3Store.state.pc
   let isFirstTick = true
 
-  const runTick = () => {
+  const checkBreakpoint = (): boolean => {
     const state = lc3Store.state
-    if (!state.isRunning || state.isHalted || state.waitingForInput) {
-      stopAutoRun()
-      return
-    }
-
-    // Check for breakpoint (but skip if we're still on the starting breakpoint)
     const currentLine = state.pcToLine.get(state.pc)
     if (currentLine && state.breakpoints.has(currentLine)) {
       // Only pause if we've moved past the starting point
       if (!isFirstTick || state.pc !== startingPC) {
         pause()
-        return
+        return true
       }
     }
-
-    isFirstTick = false
-    step()
+    return false
   }
 
-  autoRunInterval = setInterval(runTick, lc3Store.state.stepSpeed)
+  const stepSpeed = lc3Store.state.stepSpeed
+
+  if (stepSpeed === 0) {
+    // Instant mode: use VM's native run() function for maximum speed
+    // This runs until halt, I/O, or error in native WASM
+    if (!vm) return
+
+    wasInstantMode = true
+    const result = vm.run() as StepResult
+    updateVMState()
+    handleStepResult(result)
+    
+    // Only clear isRunning if we're not waiting for input (so we can resume)
+    if (!lc3Store.state.waitingForInput) {
+      lc3Store.setState((s) => ({ ...s, isRunning: false }))
+      wasInstantMode = false
+    }
+  } else {
+    // Normal mode: use setInterval with specified delay
+    const runTick = () => {
+      const state = lc3Store.state
+      if (!state.isRunning || state.isHalted || state.waitingForInput) {
+        stopAutoRun()
+        return
+      }
+
+      if (checkBreakpoint()) return
+      isFirstTick = false
+      step()
+    }
+
+    autoRunInterval = setInterval(runTick, stepSpeed)
+  }
 }
 
 function stopAutoRun() {
@@ -425,6 +452,11 @@ function stopAutoRun() {
     clearInterval(autoRunInterval)
     autoRunInterval = null
   }
+  if (autoRunRAF) {
+    cancelAnimationFrame(autoRunRAF)
+    autoRunRAF = null
+  }
+  wasInstantMode = false
 }
 
 // Memory access
