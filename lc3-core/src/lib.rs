@@ -35,12 +35,8 @@ pub struct LC3 {
     pub regs: [u16; 8],
     /// Program Counter.
     pub pc: u16,
-    /// Negative condition flag.
-    pub n: bool,
-    /// Zero condition flag.
-    pub z: bool,
-    /// Positive condition flag.
-    pub p: bool,
+    /// Condition codes packed: bit 2 = N, bit 1 = Z, bit 0 = P
+    cond: u8,
 }
 
 impl Default for LC3 {
@@ -49,14 +45,29 @@ impl Default for LC3 {
             memory: [0; 65536],
             regs: [0; 8],
             pc: 0x3000,
-            n: false,
-            z: true,
-            p: false,
+            cond: 0b010, // Z flag set initially
         }
     }
 }
 
 impl LC3 {
+    /// Returns true if negative flag is set.
+    #[inline]
+    pub fn n(&self) -> bool {
+        self.cond & 0b100 != 0
+    }
+
+    /// Returns true if zero flag is set.
+    #[inline]
+    pub fn z(&self) -> bool {
+        self.cond & 0b010 != 0
+    }
+
+    /// Returns true if positive flag is set.
+    #[inline]
+    pub fn p(&self) -> bool {
+        self.cond & 0b001 != 0
+    }
     /// Execute a single instruction and return any resulting event.
     ///
     /// The PC is incremented before the instruction executes (as per LC-3 spec),
@@ -144,11 +155,8 @@ impl LC3 {
     }
 
     fn br(&mut self, instr: u16) {
-        let cond = (instr >> 9) & 0x7;
-        let should_branch = (cond & 0x4 != 0 && self.n)
-            || (cond & 0x2 != 0 && self.z)
-            || (cond & 0x1 != 0 && self.p);
-        if should_branch {
+        let cond = ((instr >> 9) & 0x7) as u8;
+        if cond & self.cond != 0 {
             self.pc = self.pc.wrapping_add(sign_extend(instr & 0x1FF, 9));
         }
     }
@@ -233,9 +241,13 @@ impl LC3 {
     #[inline]
     fn update_flags(&mut self, r: usize) {
         let val = self.regs[r];
-        self.n = val & 0x8000 != 0;
-        self.z = val == 0;
-        self.p = !self.n && !self.z;
+        self.cond = if val == 0 {
+            0b010 // Z
+        } else if val & 0x8000 != 0 {
+            0b100 // N
+        } else {
+            0b001 // P
+        };
     }
 }
 
@@ -267,7 +279,7 @@ mod tests {
         vm.memory[0x3000] = 0x1042; // ADD R0, R1, R2
         vm.step();
         assert_eq!(vm.regs[0], 8);
-        assert!(vm.p);
+        assert!(vm.p());
     }
 
     #[test]
@@ -289,7 +301,7 @@ mod tests {
     #[test]
     fn test_branch() {
         let mut vm = LC3::default();
-        vm.z = true;
+        vm.cond = 0b010; // Z flag set
         vm.memory[0x3000] = 0x0402; // BRZ +2
         vm.step();
         assert_eq!(vm.pc, 0x3003);
