@@ -175,6 +175,7 @@ export class WasmLC3 {
  * Returns an object with:
  * - `success`: boolean indicating success
  * - `code`: array of 16-bit words (if successful)
+ * - `origin`: the origin address from .ORIG directive (if successful)
  * - `error`: error message (if failed)
  */
 export function assemble(source: string): any;

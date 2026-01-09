@@ -36,6 +36,7 @@ export function ControlPanel() {
   const isHalted = useStore(lc3Store, (s) => s.isHalted)
   const isPaused = useStore(lc3Store, (s) => s.isPaused)
   const waitingForInput = useStore(lc3Store, (s) => s.waitingForInput)
+  const isAssembled = useStore(lc3Store, (s) => s.isAssembled)
   const stepSpeed = useStore(lc3Store, (s) => s.stepSpeed)
   const wasmReady = useStore(lc3Store, (s) => s.wasmReady)
   const currentLine = getCurrentLine()
@@ -140,7 +141,7 @@ export function ControlPanel() {
                   size="sm"
                   variant={isRunning ? 'destructive' : 'default'}
                   onClick={handleRun}
-                  disabled={!wasmReady || isHalted}
+                  disabled={!wasmReady || !isAssembled || isHalted}
                   className="gap-1.5"
                 >
                   {isRunning ? (
@@ -167,7 +168,7 @@ export function ControlPanel() {
                   size="sm"
                   variant="outline"
                   onClick={handleStep}
-                  disabled={!wasmReady || isRunning || isHalted}
+                  disabled={!wasmReady || !isAssembled || isRunning || isHalted}
                   className="gap-1.5"
                 >
                   <SkipForward className="h-4 w-4" />
@@ -183,7 +184,7 @@ export function ControlPanel() {
                   size="sm"
                   variant="outline"
                   onClick={handleRunToLine}
-                  disabled={!wasmReady || isRunning || isHalted}
+                  disabled={!wasmReady || !isAssembled || isRunning || isHalted}
                   className="gap-1.5"
                 >
                   <FastForward className="h-4 w-4" />

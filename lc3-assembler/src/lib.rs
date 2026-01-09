@@ -70,6 +70,11 @@ impl Assembler {
         Self::default()
     }
 
+    /// Get the origin address (set by .ORIG directive during assembly).
+    pub fn origin(&self) -> u16 {
+        self.origin
+    }
+
     /// Assemble source code into machine code words.
     pub fn assemble(&mut self, source: &str) -> Result<Vec<u16>, String> {
         self.assemble_with_errors(source).map_err(|e| e.to_string())

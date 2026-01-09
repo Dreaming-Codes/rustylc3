@@ -25,6 +25,7 @@ export interface LC3State {
   isHalted: boolean
   isPaused: boolean
   waitingForInput: boolean
+  isAssembled: boolean // Whether a program is loaded
 
   // Registers (R0-R7)
   registers: number[]
@@ -75,6 +76,7 @@ export const lc3Store = new Store<LC3State>({
   isHalted: false,
   isPaused: false,
   waitingForInput: false,
+  isAssembled: false,
   registers: [0, 0, 0, 0, 0, 0, 0, 0],
   prevRegisters: [0, 0, 0, 0, 0, 0, 0, 0],
   changedRegisters: new Set(),
@@ -132,9 +134,14 @@ export function assemble(): boolean {
   if (!wasmModule || !vm) return false
 
   const state = lc3Store.state
-  const result = wasmModule.assemble(state.sourceCode)
+  const result = wasmModule.assemble(state.sourceCode) as {
+    success: boolean
+    code?: number[]
+    origin?: number
+    error?: string
+  }
 
-  if (!result.success) {
+  if (!result.success || !result.code) {
     lc3Store.setState((s) => ({
       ...s,
       consoleOutput: s.consoleOutput + `Assembly error: ${result.error}\n`,
@@ -142,28 +149,29 @@ export function assemble(): boolean {
     return false
   }
 
+  const origin = result.origin ?? 0x3000
+
   // Build line mapping
   const lines = state.sourceCode.split('\n')
   const pcToLine = new Map<number, number>()
   const lineToPC = new Map<number, number>()
 
-  let origin = 0x3000
   let currentAddr = origin
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i].trim()
     if (!line || line.startsWith(';')) continue
 
-    // Check for .ORIG directive
-    const origMatch = line.match(/\.ORIG\s+x([0-9A-Fa-f]+)/i)
-    if (origMatch) {
-      origin = parseInt(origMatch[1], 16)
-      currentAddr = origin
+    // Check for .ORIG directive - just skip it, origin is already known
+    if (line.match(/\.ORIG\s+/i)) {
       continue
     }
 
     // Skip .END and other directives that don't generate code
     if (line.match(/^\.(END|EXTERNAL|GLOBAL)/i)) continue
+
+    // Skip if it's just a label on its own line
+    if (line.match(/^[a-zA-Z_][a-zA-Z0-9_]*\s*$/)) continue
 
     // Map this line to current address
     const lineNum = i + 1 // 1-based
@@ -184,12 +192,13 @@ export function assemble(): boolean {
     prevPc: origin,
     isHalted: false,
     isPaused: false,
+    isAssembled: true,
     waitingForInput: false,
     registers: Array.from(vm!.regs()),
     prevRegisters: [0, 0, 0, 0, 0, 0, 0, 0],
     changedRegisters: new Set(),
     conditionCode: vm!.cond_str(),
-    consoleOutput: '',
+    consoleOutput: s.consoleOutput + `Assembled successfully. Origin: x${origin.toString(16).toUpperCase()}\n`,
     pcToLine,
     lineToPC,
   }))
@@ -291,7 +300,7 @@ export function step(): boolean {
   if (!vm) return false
 
   const state = lc3Store.state
-  if (state.isHalted || state.waitingForInput) return false
+  if (!state.isAssembled || state.isHalted || state.waitingForInput) return false
 
   const result = vm.step() as StepResult
   updateVMState()
@@ -302,7 +311,7 @@ export function run() {
   if (!vm) return
 
   const state = lc3Store.state
-  if (state.isHalted || state.waitingForInput) return
+  if (!state.isAssembled || state.isHalted || state.waitingForInput) return
 
   lc3Store.setState((s) => ({ ...s, isRunning: true, isPaused: false }))
   startAutoRun()
@@ -323,6 +332,7 @@ export function stop() {
     isRunning: false,
     isHalted: false,
     isPaused: false,
+    isAssembled: false,
     waitingForInput: false,
     registers: [0, 0, 0, 0, 0, 0, 0, 0],
     prevRegisters: [0, 0, 0, 0, 0, 0, 0, 0],

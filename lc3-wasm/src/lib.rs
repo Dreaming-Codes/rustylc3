@@ -196,6 +196,7 @@ impl Default for WasmLC3 {
 pub struct AssemblyResult {
     pub success: bool,
     pub code: Option<Vec<u16>>,
+    pub origin: Option<u16>,
     pub error: Option<String>,
 }
 
@@ -204,6 +205,7 @@ pub struct AssemblyResult {
 /// Returns an object with:
 /// - `success`: boolean indicating success
 /// - `code`: array of 16-bit words (if successful)
+/// - `origin`: the origin address from .ORIG directive (if successful)
 /// - `error`: error message (if failed)
 #[wasm_bindgen]
 pub fn assemble(source: &str) -> JsValue {
@@ -213,11 +215,13 @@ pub fn assemble(source: &str) -> JsValue {
         Ok(code) => AssemblyResult {
             success: true,
             code: Some(code),
+            origin: Some(asm.origin()),
             error: None,
         },
         Err(e) => AssemblyResult {
             success: false,
             code: None,
+            origin: None,
             error: Some(e),
         },
     };

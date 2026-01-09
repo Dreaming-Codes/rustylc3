@@ -471,6 +471,7 @@ if (Symbol.dispose) WasmLC3.prototype[Symbol.dispose] = WasmLC3.prototype.free;
  * Returns an object with:
  * - `success`: boolean indicating success
  * - `code`: array of 16-bit words (if successful)
+ * - `origin`: the origin address from .ORIG directive (if successful)
  * - `error`: error message (if failed)
  * @param {string} source
  * @returns {any}
