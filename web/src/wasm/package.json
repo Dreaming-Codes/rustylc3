@@ -1,0 +1,15 @@
+{
+  "name": "lc3-wasm",
+  "type": "module",
+  "version": "0.1.0",
+  "files": [
+    "lc3_wasm_bg.wasm",
+    "lc3_wasm.js",
+    "lc3_wasm.d.ts"
+  ],
+  "main": "lc3_wasm.js",
+  "types": "lc3_wasm.d.ts",
+  "sideEffects": [
+    "./snippets/*"
+  ]
+}
