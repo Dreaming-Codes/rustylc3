@@ -29,7 +29,7 @@ function loadInitialState(): OSState {
     if (stored) {
       const parsed = JSON.parse(stored)
       return {
-        osType: parsed.osType || 'none',
+        osType: parsed.osType || 'lc3tools',
         customOSData: parsed.customOSData || null,
         customOSName: parsed.customOSName || null,
         isLoaded: false, // Always start unloaded
@@ -39,7 +39,7 @@ function loadInitialState(): OSState {
     console.error('Failed to load OS config from localStorage:', e)
   }
   return {
-    osType: 'none',
+    osType: 'lc3tools',
     customOSData: null,
     customOSName: null,
     isLoaded: false,
