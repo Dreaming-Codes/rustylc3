@@ -229,6 +229,12 @@ impl WasmLC3 {
         self.vm.pc = pc;
     }
 
+    /// Get the Machine Control Register (MCR) at address 0xFFFE.
+    /// Bit 15: clock enable (1 = running, 0 = halted)
+    pub fn mcr(&self) -> u16 {
+        self.vm.memory[0xFFFE]
+    }
+
     /// Get a register value (0-7).
     pub fn reg(&self, r: u8) -> u16 {
         self.vm.regs[r as usize & 7]

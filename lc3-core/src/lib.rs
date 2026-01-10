@@ -98,7 +98,7 @@ impl Default for LC3 {
             // Default: user mode (bit 15=1), priority 0, Z flag set
             psr: 0x8002,
             saved_ssp: 0x3000,
-            saved_usp: 0xFE00,
+            saved_usp: 0x0000,
             os_mode: false,
             keyboard_data: None,
             pending_output: None,
@@ -115,7 +115,7 @@ impl LC3 {
         self.pc = 0x3000;
         self.psr = 0x8002; // User mode, Z flag
         self.saved_ssp = 0x3000;
-        self.saved_usp = 0xFE00;
+        self.saved_usp = 0x0000;
         self.keyboard_data = None;
         self.pending_output = None;
         // Note: os_mode is preserved across reset
