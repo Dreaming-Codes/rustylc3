@@ -3,7 +3,7 @@
 //! This crate provides WebAssembly bindings for the LC-3 virtual machine
 //! and assembler, enabling browser-based LC-3 development environments.
 
-use lc3_assembler::Assembler;
+use lc3_assembler::{Assembler, lc3tools_format};
 use lc3_core::{LC3, VMError, VMEvent};
 use serde::{Deserialize, Serialize};
 use wasm_bindgen::prelude::*;
@@ -73,23 +73,46 @@ impl WasmLC3 {
         self.vm.pc = origin;
     }
 
-    /// Load a program from raw bytes (big-endian, as produced by the assembler).
+    /// Load a program from raw bytes.
     ///
-    /// Format: first 2 bytes are the origin, followed by 2-byte words.
+    /// Supports both lc3tools format (with magic header) and legacy format.
+    /// Legacy format: first 2 bytes are the origin (big-endian), followed by 2-byte words.
     pub fn load_bytes(&mut self, bytes: &[u8]) -> Result<(), JsError> {
         if bytes.len() < 2 {
             return Err(JsError::new("Program too short"));
         }
-        if bytes.len() % 2 != 0 {
-            return Err(JsError::new("Program must have even number of bytes"));
-        }
 
-        let origin = u16::from_be_bytes([bytes[0], bytes[1]]);
-        self.vm.pc = origin;
+        if lc3tools_format::is_lc3tools_format(bytes) {
+            // lc3tools format
+            let entries = lc3tools_format::decode(bytes).map_err(|e| JsError::new(&e))?;
+            let segments = lc3tools_format::entries_to_segments(&entries);
 
-        for (i, chunk) in bytes[2..].chunks(2).enumerate() {
-            let word = u16::from_be_bytes([chunk[0], chunk[1]]);
-            self.vm.memory[origin as usize + i] = word;
+            if segments.is_empty() {
+                return Err(JsError::new("No segments in program"));
+            }
+
+            // Set PC to first segment origin
+            self.vm.pc = segments[0].origin;
+
+            // Load all segments
+            for seg in &segments {
+                for (i, &word) in seg.code.iter().enumerate() {
+                    self.vm.memory[seg.origin as usize + i] = word;
+                }
+            }
+        } else {
+            // Legacy big-endian format
+            if bytes.len() % 2 != 0 {
+                return Err(JsError::new("Program must have even number of bytes"));
+            }
+
+            let origin = u16::from_be_bytes([bytes[0], bytes[1]]);
+            self.vm.pc = origin;
+
+            for (i, chunk) in bytes[2..].chunks(2).enumerate() {
+                let word = u16::from_be_bytes([chunk[0], chunk[1]]);
+                self.vm.memory[origin as usize + i] = word;
+            }
         }
 
         Ok(())
@@ -155,20 +178,36 @@ impl WasmLC3 {
     ///
     /// This is used to load the operating system before loading a user program.
     /// Unlike load_bytes, this does not change the PC.
+    /// Supports both lc3tools format (with magic header) and legacy format.
     pub fn load_os_bytes(&mut self, bytes: &[u8]) -> Result<(), JsError> {
-        if bytes.len() < 2 {
+        if bytes.len() < 4 {
             return Err(JsError::new("OS image too short"));
         }
-        if bytes.len() % 2 != 0 {
-            return Err(JsError::new("OS image must have even number of bytes"));
-        }
 
-        let origin = u16::from_be_bytes([bytes[0], bytes[1]]);
-        // Don't change PC - the OS is loaded but we'll start at user program location
+        if lc3tools_format::is_lc3tools_format(bytes) {
+            // lc3tools format: explicit is_orig flags
+            let entries = lc3tools_format::decode(bytes).map_err(|e| JsError::new(&e))?;
+            let segments = lc3tools_format::entries_to_segments(&entries);
 
-        for (i, chunk) in bytes[2..].chunks(2).enumerate() {
-            let word = u16::from_be_bytes([chunk[0], chunk[1]]);
-            self.vm.memory[origin as usize + i] = word;
+            for seg in &segments {
+                for (i, &word) in seg.code.iter().enumerate() {
+                    self.vm.memory[seg.origin as usize + i] = word;
+                }
+            }
+        } else {
+            // Legacy big-endian format (single segment only for safety)
+            if bytes.len() % 2 != 0 {
+                return Err(JsError::new("OS image must have even number of bytes"));
+            }
+
+            let origin = u16::from_be_bytes([bytes[0], bytes[1]]);
+            let mut addr = origin as usize;
+
+            for chunk in bytes[2..].chunks(2) {
+                let word = u16::from_be_bytes([chunk[0], chunk[1]]);
+                self.vm.memory[addr] = word;
+                addr += 1;
+            }
         }
 
         Ok(())

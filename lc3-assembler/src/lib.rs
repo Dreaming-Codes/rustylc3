@@ -81,6 +81,145 @@ pub struct Segment {
     pub code: Vec<u16>,
 }
 
+/// lc3tools .obj file format constants and utilities.
+pub mod lc3tools_format {
+    /// Magic header bytes for lc3tools .obj files.
+    pub const MAGIC: &[u8] = &[0x1c, 0x30, 0x15, 0xc0, 0x01];
+    /// Version bytes for lc3tools .obj files.
+    pub const VERSION: &[u8] = &[0x01, 0x01];
+
+    /// Encode segments into lc3tools .obj format.
+    ///
+    /// Format:
+    /// - Magic header (5 bytes)
+    /// - Version (2 bytes)
+    /// - For each word:
+    ///   - value: u16 (little-endian)
+    ///   - is_orig: u8 (1 if this is an origin, 0 otherwise)
+    ///   - num_chars: u32 (little-endian, length of source line)
+    ///   - line: [u8; num_chars] (source line, not null-terminated)
+    pub fn encode(segments: &[super::Segment]) -> Vec<u8> {
+        let mut out = Vec::new();
+
+        // Header
+        out.extend_from_slice(MAGIC);
+        out.extend_from_slice(VERSION);
+
+        // Each segment
+        for seg in segments {
+            // Origin entry
+            out.extend_from_slice(&seg.origin.to_le_bytes());
+            out.push(1); // is_orig = true
+            out.extend_from_slice(&0u32.to_le_bytes()); // no source line
+
+            // Code entries
+            for &word in &seg.code {
+                out.extend_from_slice(&word.to_le_bytes());
+                out.push(0); // is_orig = false
+                out.extend_from_slice(&0u32.to_le_bytes()); // no source line
+            }
+        }
+
+        out
+    }
+
+    /// Memory entry parsed from lc3tools format.
+    #[derive(Debug, Clone)]
+    pub struct MemEntry {
+        pub value: u16,
+        pub is_orig: bool,
+        pub line: String,
+    }
+
+    /// Parse lc3tools .obj format into memory entries.
+    ///
+    /// Returns an error if the file is malformed or has wrong magic/version.
+    pub fn decode(data: &[u8]) -> Result<Vec<MemEntry>, String> {
+        if data.len() < MAGIC.len() + VERSION.len() {
+            return Err("File too short for lc3tools format".into());
+        }
+
+        if &data[..MAGIC.len()] != MAGIC {
+            return Err("Invalid lc3tools magic header".into());
+        }
+
+        // We accept any version for compatibility
+        let mut offset = MAGIC.len() + VERSION.len();
+        let mut entries = Vec::new();
+
+        while offset + 7 <= data.len() {
+            // value: 2 bytes (little-endian)
+            let value = u16::from_le_bytes([data[offset], data[offset + 1]]);
+            offset += 2;
+
+            // is_orig: 1 byte
+            let is_orig = data[offset] != 0;
+            offset += 1;
+
+            // num_chars: 4 bytes (little-endian)
+            let num_chars = u32::from_le_bytes([
+                data[offset],
+                data[offset + 1],
+                data[offset + 2],
+                data[offset + 3],
+            ]) as usize;
+            offset += 4;
+
+            // line: num_chars bytes
+            if offset + num_chars > data.len() {
+                return Err("Truncated source line in lc3tools file".into());
+            }
+            let line = String::from_utf8_lossy(&data[offset..offset + num_chars]).into_owned();
+            offset += num_chars;
+
+            entries.push(MemEntry {
+                value,
+                is_orig,
+                line,
+            });
+        }
+
+        Ok(entries)
+    }
+
+    /// Load lc3tools format entries into segments.
+    pub fn entries_to_segments(entries: &[MemEntry]) -> Vec<super::Segment> {
+        let mut segments = Vec::new();
+        let mut current_origin = 0u16;
+        let mut current_code = Vec::new();
+
+        for entry in entries {
+            if entry.is_orig {
+                // Save previous segment if it has code
+                if !current_code.is_empty() {
+                    segments.push(super::Segment {
+                        origin: current_origin,
+                        code: std::mem::take(&mut current_code),
+                    });
+                }
+                current_origin = entry.value;
+            } else {
+                current_code.push(entry.value);
+            }
+        }
+
+        // Save final segment
+        if !current_code.is_empty() {
+            segments.push(super::Segment {
+                origin: current_origin,
+                code: current_code,
+            });
+        }
+
+        segments
+    }
+
+    /// Check if data looks like lc3tools format (has correct magic header).
+    pub fn is_lc3tools_format(data: &[u8]) -> bool {
+        data.len() >= MAGIC.len() && &data[..MAGIC.len()] == MAGIC
+    }
+}
+
 /// Two-pass LC-3 assembler.
 #[derive(Debug, Default)]
 pub struct Assembler {
@@ -123,17 +262,15 @@ impl Assembler {
 
         let mut errors = Vec::new();
         self.first_pass(&program, source, &mut errors);
-        let code = self.second_pass(&program, source, &mut errors);
-
-        // Store in segments (single segment for backward compatibility)
-        if !code.is_empty() {
-            self.segments.push(Segment {
-                origin: self.origin,
-                code: code.clone(),
-            });
-        }
+        self.second_pass(&program, source, &mut errors);
 
         if errors.is_empty() {
+            // Return concatenated code from all segments for backward compatibility
+            let code: Vec<u16> = self
+                .segments
+                .iter()
+                .flat_map(|s| s.code.iter().copied())
+                .collect();
             Ok(code)
         } else {
             Err(AssemblyError::SemanticErrors(errors))
@@ -150,21 +287,22 @@ impl Assembler {
 
         let mut errors = Vec::new();
         self.first_pass(&program, source, &mut errors);
-        let code = self.second_pass(&program, source, &mut errors);
-
-        // Store in segments
-        if !code.is_empty() {
-            self.segments.push(Segment {
-                origin: self.origin,
-                code,
-            });
-        }
+        self.second_pass(&program, source, &mut errors);
 
         if errors.is_empty() {
             Ok(self.segments.clone())
         } else {
             Err(AssemblyError::SemanticErrors(errors))
         }
+    }
+
+    /// Assemble source and return lc3tools-compatible .obj bytes.
+    ///
+    /// This produces binary output compatible with the lc3tools simulator,
+    /// which explicitly marks segment origins with an `is_orig` flag.
+    pub fn assemble_to_lc3tools(&mut self, source: &str) -> Result<Vec<u8>, AssemblyError> {
+        let segments = self.assemble_segments(source)?;
+        Ok(lc3tools_format::encode(&segments))
     }
 
     /// Format an error with source context for display.
@@ -179,6 +317,7 @@ impl Assembler {
 
     fn first_pass(&mut self, program: &Program, _source: &str, _errors: &mut Vec<SemanticError>) {
         let mut pc = self.origin;
+        let mut first_orig = true;
 
         for spanned_line in &program.lines {
             match &spanned_line.line {
@@ -187,14 +326,14 @@ impl Assembler {
                 }
                 Line::LabeledDirective(label, dir) => {
                     self.symbols.insert(label.value.clone(), pc);
-                    pc = self.advance_pc_directive(dir, pc);
+                    pc = self.advance_pc_directive_first_pass(dir, pc, &mut first_orig);
                 }
                 Line::LabeledInstruction(label, _) => {
                     self.symbols.insert(label.value.clone(), pc);
                     pc += 1;
                 }
                 Line::Directive(dir) => {
-                    pc = self.advance_pc_directive(dir, pc);
+                    pc = self.advance_pc_directive_first_pass(dir, pc, &mut first_orig);
                 }
                 Line::Instruction(_) => pc += 1,
                 Line::Empty | Line::Error => {}
@@ -202,10 +341,20 @@ impl Assembler {
         }
     }
 
-    fn advance_pc_directive(&mut self, dir: &Directive, pc: u16) -> u16 {
+    /// Advance PC for directive during first pass.
+    /// Sets self.origin only for the FIRST .ORIG encountered.
+    fn advance_pc_directive_first_pass(
+        &mut self,
+        dir: &Directive,
+        pc: u16,
+        first_orig: &mut bool,
+    ) -> u16 {
         match dir {
             Directive::Orig(addr) => {
-                self.origin = *addr;
+                if *first_orig {
+                    self.origin = *addr;
+                    *first_orig = false;
+                }
                 *addr
             }
             Directive::Fill(_) => pc + 1,
@@ -215,26 +364,46 @@ impl Assembler {
         }
     }
 
-    fn second_pass(
-        &self,
-        program: &Program,
-        source: &str,
-        errors: &mut Vec<SemanticError>,
-    ) -> Vec<u16> {
-        let mut result = Vec::new();
+    fn second_pass(&mut self, program: &Program, source: &str, errors: &mut Vec<SemanticError>) {
+        let mut current_origin = self.origin;
+        let mut current_code: Vec<u16> = Vec::new();
         let mut pc = self.origin;
+        let mut in_segment = false;
 
         for spanned_line in &program.lines {
             match &spanned_line.line {
                 Line::Label(_) => {}
                 Line::LabeledDirective(_, dir) | Line::Directive(dir) => {
-                    let (words, new_pc) =
-                        self.emit_directive(dir, pc, source, spanned_line.span.clone(), errors);
-                    result.extend(words);
-                    pc = new_pc;
+                    if let Directive::Orig(addr) = dir {
+                        // Save current segment if it has code
+                        if !current_code.is_empty() {
+                            self.segments.push(Segment {
+                                origin: current_origin,
+                                code: std::mem::take(&mut current_code),
+                            });
+                        }
+                        // Start new segment
+                        current_origin = *addr;
+                        pc = *addr;
+                        in_segment = true;
+                    } else if let Directive::End = dir {
+                        // Save current segment if it has code
+                        if !current_code.is_empty() {
+                            self.segments.push(Segment {
+                                origin: current_origin,
+                                code: std::mem::take(&mut current_code),
+                            });
+                        }
+                        in_segment = false;
+                    } else {
+                        let (words, new_pc) =
+                            self.emit_directive(dir, pc, source, spanned_line.span.clone(), errors);
+                        current_code.extend(words);
+                        pc = new_pc;
+                    }
                 }
                 Line::LabeledInstruction(_, instr) | Line::Instruction(instr) => {
-                    result.push(self.emit_instruction(
+                    current_code.push(self.emit_instruction(
                         instr,
                         pc,
                         source,
@@ -246,7 +415,14 @@ impl Assembler {
                 Line::Empty | Line::Error => {}
             }
         }
-        result
+
+        // Handle case where file doesn't end with .END
+        if in_segment && !current_code.is_empty() {
+            self.segments.push(Segment {
+                origin: current_origin,
+                code: current_code,
+            });
+        }
     }
 
     fn emit_directive(
@@ -612,5 +788,115 @@ mod tests {
         let mut asm = Assembler::new();
         let code = asm.assemble(source).unwrap();
         assert_eq!(code.len(), 3 + 6); // LEA, PUTS, HALT + "Hello\0"
+    }
+
+    #[test]
+    fn test_multi_segment() {
+        let source = r#"
+.ORIG x0000
+.FILL x0400    ; Vector 0 points to x0400
+.FILL x0401    ; Vector 1 points to x0401
+.END
+
+.ORIG x0400
+ADD R0, R0, #1
+HALT
+.END
+
+.ORIG x0500
+ADD R1, R1, #2
+RET
+.END
+"#;
+        let mut asm = Assembler::new();
+        let segments = asm.assemble_segments(source).unwrap();
+
+        assert_eq!(segments.len(), 3);
+
+        // First segment at x0000
+        assert_eq!(segments[0].origin, 0x0000);
+        assert_eq!(segments[0].code.len(), 2);
+        assert_eq!(segments[0].code[0], 0x0400);
+        assert_eq!(segments[0].code[1], 0x0401);
+
+        // Second segment at x0400
+        assert_eq!(segments[1].origin, 0x0400);
+        assert_eq!(segments[1].code.len(), 2);
+        assert_eq!(segments[1].code[0], 0x1021); // ADD R0, R0, #1
+        assert_eq!(segments[1].code[1], 0xF025); // HALT
+
+        // Third segment at x0500
+        assert_eq!(segments[2].origin, 0x0500);
+        assert_eq!(segments[2].code.len(), 2);
+        assert_eq!(segments[2].code[0], 0x1262); // ADD R1, R1, #2
+        assert_eq!(segments[2].code[1], 0xC1C0); // RET
+    }
+
+    #[test]
+    fn test_multi_segment_cross_reference() {
+        // Test that labels from one segment can be referenced in another
+        let source = r#"
+.ORIG x0000
+.FILL HANDLER  ; Vector 0 points to HANDLER
+.END
+
+.ORIG x0400
+HANDLER ADD R0, R0, #1
+        RET
+.END
+"#;
+        let mut asm = Assembler::new();
+        let segments = asm.assemble_segments(source).unwrap();
+
+        assert_eq!(segments.len(), 2);
+
+        // First segment should have the address of HANDLER (x0400)
+        assert_eq!(segments[0].origin, 0x0000);
+        assert_eq!(segments[0].code[0], 0x0400);
+
+        // Second segment at x0400
+        assert_eq!(segments[1].origin, 0x0400);
+    }
+
+    #[test]
+    fn test_lc3tools_format_roundtrip() {
+        // Test encoding and decoding of lc3tools format
+        let source = r#"
+.ORIG x0000
+.FILL x0400
+.END
+
+.ORIG x0400
+ADD R0, R0, #1
+HALT
+.END
+"#;
+        let mut asm = Assembler::new();
+        let bytes = asm.assemble_to_lc3tools(source).unwrap();
+
+        // Verify magic header
+        assert_eq!(&bytes[..5], lc3tools_format::MAGIC);
+        assert_eq!(&bytes[5..7], lc3tools_format::VERSION);
+
+        // Decode and verify
+        let entries = lc3tools_format::decode(&bytes).unwrap();
+        let segments = lc3tools_format::entries_to_segments(&entries);
+
+        assert_eq!(segments.len(), 2);
+        assert_eq!(segments[0].origin, 0x0000);
+        assert_eq!(segments[0].code, vec![0x0400]);
+        assert_eq!(segments[1].origin, 0x0400);
+        assert_eq!(segments[1].code, vec![0x1021, 0xF025]); // ADD R0,R0,#1 and HALT
+    }
+
+    #[test]
+    fn test_lc3tools_format_detection() {
+        // Test that we can detect lc3tools format
+        let valid = [0x1c, 0x30, 0x15, 0xc0, 0x01, 0x01, 0x01];
+        assert!(lc3tools_format::is_lc3tools_format(&valid));
+
+        // Legacy format starts with origin (big-endian)
+        let legacy = [0x30, 0x00, 0xF0, 0x25]; // origin x3000, HALT
+        assert!(!lc3tools_format::is_lc3tools_format(&legacy));
     }
 }
