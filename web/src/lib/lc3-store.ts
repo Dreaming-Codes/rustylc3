@@ -27,6 +27,7 @@ export interface LC3State {
   isPaused: boolean
   waitingForInput: boolean
   isAssembled: boolean // Whether a program is loaded
+  needsOsBoot: boolean // Whether OS boot is needed before running
 
   // Registers (R0-R7)
   registers: number[]
@@ -36,6 +37,8 @@ export interface LC3State {
   // Special registers
   pc: number
   prevPc: number
+  psr: number // Processor Status Register
+  mcr: number // Machine Control Register
   conditionCode: string // 'N', 'Z', or 'P'
 
   // Console output
@@ -81,11 +84,14 @@ export const lc3Store = new Store<LC3State>({
   isPaused: false,
   waitingForInput: false,
   isAssembled: false,
+  needsOsBoot: false,
   registers: [0, 0, 0, 0, 0, 0, 0, 0],
   prevRegisters: [0, 0, 0, 0, 0, 0, 0, 0],
   changedRegisters: new Set(),
   pc: 0x3000,
   prevPc: 0x3000,
+  psr: 0x0002, // Default: supervisor mode, Z flag set
+  mcr: 0x0000,
   conditionCode: 'Z',
   consoleOutput: '',
   stepSpeed: 100,
@@ -112,9 +118,10 @@ let initPromise: Promise<void> | null = null
 /**
  * Load the configured OS into the VM.
  * This should be called after vm.reset() and before loading user programs.
+ * Returns true if OS was successfully loaded.
  */
-async function loadOSIntoVM(): Promise<void> {
-  if (!vm) return
+async function loadOSIntoVM(): Promise<boolean> {
+  if (!vm) return false
 
   const osBytes = await getOSBytes()
   if (osBytes) {
@@ -123,12 +130,15 @@ async function loadOSIntoVM(): Promise<void> {
       vm.set_os_mode(true)
       vm.init_mcr()
       markOSLoaded()
+      return true
     } catch (e) {
       console.error('Failed to load OS:', e)
       vm.set_os_mode(false)
+      return false
     }
   } else {
     vm.set_os_mode(false)
+    return false
   }
 }
 
@@ -231,11 +241,28 @@ export async function assemble(): Promise<boolean> {
 
   // Reset VM and load OS if configured
   vm.reset()
-  await loadOSIntoVM()
+  const osLoaded = await loadOSIntoVM()
   
   // Load user program
   const program = new Uint16Array(result.code)
   vm.load(origin, program)
+
+  // If OS is loaded, set up for OS boot (user must press Boot OS button)
+  if (osLoaded) {
+    // Patch the OS to jump to our program's origin instead of x3000
+    // USER_PC is at x020A (OS_START at x0200 + 10 words: 8 instructions + OS_SP + USER_PSR)
+    vm.set_mem(0x020A, origin)
+    
+    // Set supervisor mode (PSR bit 15 = 0) so OS startup code can execute RTI
+    // PSR: 0x0002 = supervisor mode, Z flag set
+    vm.set_psr(0x0002)
+    
+    // Initialize R6 (stack pointer) to x3000, matching lc3tools initial state
+    vm.set_reg(6, 0x3000)
+    
+    // Start at OS entry point - user must press Boot OS to run
+    vm.set_pc(0x0200)
+  }
 
   // Build symbol table from analyze_symbols
   const symbolTable = new Map<number, string>()
@@ -255,21 +282,78 @@ export async function assemble(): Promise<boolean> {
   lc3Store.setState((s) => ({
     ...s,
     origin,
-    pc: origin,
-    prevPc: origin,
+    pc: vm!.pc(),
+    prevPc: vm!.pc(),
+    psr: vm!.psr(),
+    mcr: vm!.mcr(),
     isHalted: false,
     isPaused: false,
     isAssembled: true,
+    needsOsBoot: osLoaded,
     waitingForInput: false,
     registers: Array.from(vm!.regs()),
     prevRegisters: [0, 0, 0, 0, 0, 0, 0, 0],
     changedRegisters: new Set(),
     conditionCode: vm!.cond_str(),
-    consoleOutput: s.consoleOutput + `Assembled successfully. Origin: x${origin.toString(16).toUpperCase()}\n`,
+    consoleOutput: s.consoleOutput + `Assembled successfully. Origin: x${origin.toString(16).toUpperCase()}${osLoaded ? ' (Boot OS to run)' : ''}\n`,
     pcToLine,
     lineToPC,
     symbolTable,
   }))
+
+  return true
+}
+
+/**
+ * Boot the OS - runs the OS startup code which initializes R6 and transitions to user mode.
+ * This should be called after assemble() when OS mode is enabled.
+ */
+export function bootOs(): boolean {
+  if (!vm) return false
+
+  const state = lc3Store.state
+  if (!state.needsOsBoot || state.isRunning) return false
+
+  // Run OS startup until we reach user mode (RTI completes)
+  // The OS startup code is short: LD, LD, ADD, STR, LD, ADD, STR, RTI (8 instructions)
+  let maxSteps = 20 // Safety limit
+  while (maxSteps-- > 0) {
+    const psr = vm.psr()
+    const isUserMode = (psr & 0x8000) !== 0
+    if (isUserMode) break // RTI completed, now in user mode
+
+    const stepResult = vm.step() as StepResult
+    if (stepResult.type === 'Halt' || stepResult.type === 'Error') {
+      lc3Store.setState((s) => ({
+        ...s,
+        consoleOutput: s.consoleOutput + `OS boot error\n`,
+      }))
+      return false
+    }
+  }
+
+  // Update state after boot
+  lc3Store.setState((s) => ({
+    ...s,
+    needsOsBoot: false,
+    pc: vm!.pc(),
+    prevPc: vm!.pc(),
+    psr: vm!.psr(),
+    mcr: vm!.mcr(),
+    registers: Array.from(vm!.regs()),
+    prevRegisters: s.registers,
+    changedRegisters: new Set([6]), // R6 changes during boot
+    conditionCode: vm!.cond_str(),
+    consoleOutput: s.consoleOutput + `OS booted. Ready to run.\n`,
+  }))
+
+  // Clear changed indicators after animation
+  setTimeout(() => {
+    lc3Store.setState((s) => ({
+      ...s,
+      changedRegisters: new Set(),
+    }))
+  }, 300)
 
   return true
 }
@@ -299,6 +383,8 @@ function updateVMState() {
     changedRegisters: changed,
     pc: newPc,
     prevPc: s.pc,
+    psr: vm!.psr(),
+    mcr: vm!.mcr(),
     conditionCode: vm!.cond_str(),
   }))
 
@@ -426,12 +512,15 @@ export function stop() {
     isHalted: false,
     isPaused: false,
     isAssembled: false,
+    needsOsBoot: false,
     waitingForInput: false,
     registers: [0, 0, 0, 0, 0, 0, 0, 0],
     prevRegisters: [0, 0, 0, 0, 0, 0, 0, 0],
     changedRegisters: new Set(),
     pc: s.origin,
     prevPc: s.origin,
+    psr: 0x0002, // Default: supervisor mode, Z flag set
+    mcr: 0x0000,
     conditionCode: 'Z',
     consoleOutput: '',
   }))

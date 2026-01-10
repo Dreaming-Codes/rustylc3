@@ -49,11 +49,37 @@ function RegisterRow({ name, value, changed, isPC }: RegisterRowProps) {
   )
 }
 
+interface StatusRegisterProps {
+  name: string
+  value: number
+  description: string
+}
+
+function StatusRegister({ name, value, description }: StatusRegisterProps) {
+  return (
+    <div className="grid grid-cols-[3rem_1fr_1fr] items-center gap-2 rounded-md px-2 py-1.5 font-mono text-sm">
+      <span className="font-bold text-purple-400">{name}</span>
+      <span className="text-zinc-200">{formatHex(value)}</span>
+      <span className="text-zinc-500 text-xs">{description}</span>
+    </div>
+  )
+}
+
 export function RegistersPanel() {
   const registers = useStore(lc3Store, (s) => s.registers)
   const changedRegisters = useStore(lc3Store, (s) => s.changedRegisters)
   const pc = useStore(lc3Store, (s) => s.pc)
+  const psr = useStore(lc3Store, (s) => s.psr)
+  const mcr = useStore(lc3Store, (s) => s.mcr)
   const conditionCode = useStore(lc3Store, (s) => s.conditionCode)
+
+  // Decode PSR: bit 15 = privilege mode (0=supervisor, 1=user)
+  const isUserMode = (psr & 0x8000) !== 0
+  const psrMode = isUserMode ? 'User' : 'Supervisor'
+
+  // Decode MCR: bit 15 = clock enable
+  const clockEnabled = (mcr & 0x8000) !== 0
+  const mcrStatus = clockEnabled ? 'Running' : 'Stopped'
 
   return (
     <Card className="h-full border-zinc-800 bg-zinc-950/50 backdrop-blur">
@@ -96,6 +122,13 @@ export function RegistersPanel() {
           changed={changedRegisters.has(8)}
           isPC
         />
+
+        {/* Separator */}
+        <div className="my-2 border-t border-zinc-800" />
+
+        {/* Status Registers */}
+        <StatusRegister name="PSR" value={psr} description={psrMode} />
+        <StatusRegister name="MCR" value={mcr} description={mcrStatus} />
       </CardContent>
     </Card>
   )

@@ -7,6 +7,7 @@ import {
   RotateCcw,
   Zap,
   AlertTriangle,
+  Power,
 } from 'lucide-react'
 import {
   lc3Store,
@@ -17,6 +18,7 @@ import {
   step,
   setStepSpeed,
   getCurrentLine,
+  bootOs,
 } from '@/lib/lc3-store'
 import { Button } from '@/components/ui/button'
 import { Slider } from '@/components/ui/slider'
@@ -36,6 +38,7 @@ export function ControlPanel() {
   const isPaused = useStore(lc3Store, (s) => s.isPaused)
   const waitingForInput = useStore(lc3Store, (s) => s.waitingForInput)
   const isAssembled = useStore(lc3Store, (s) => s.isAssembled)
+  const needsOsBoot = useStore(lc3Store, (s) => s.needsOsBoot)
   const stepSpeed = useStore(lc3Store, (s) => s.stepSpeed)
   const wasmReady = useStore(lc3Store, (s) => s.wasmReady)
   const breakpoints = useStore(lc3Store, (s) => s.breakpoints)
@@ -64,6 +67,10 @@ export function ControlPanel() {
     stop()
   }, [])
 
+  const handleBootOs = useCallback(() => {
+    bootOs()
+  }, [])
+
   const handleSpeedChange = useCallback((values: number[]) => {
     setStepSpeed(values[0])
   }, [])
@@ -75,6 +82,7 @@ export function ControlPanel() {
     if (waitingForInput) return { text: 'Waiting Input', variant: 'outline' as const }
     if (isRunning) return { text: 'Running', variant: 'default' as const }
     if (isPaused) return { text: 'Paused', variant: 'secondary' as const }
+    if (needsOsBoot) return { text: 'Boot OS', variant: 'outline' as const }
     return { text: 'Ready', variant: 'outline' as const }
   }
 
@@ -128,13 +136,31 @@ export function ControlPanel() {
               <TooltipContent>Assemble and load program</TooltipContent>
             </Tooltip>
 
+            {needsOsBoot && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    size="sm"
+                    variant="default"
+                    onClick={handleBootOs}
+                    disabled={!wasmReady || isRunning}
+                    className="gap-1.5 bg-purple-600 hover:bg-purple-700"
+                  >
+                    <Power className="h-4 w-4" />
+                    Boot OS
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Run OS startup code to initialize the machine</TooltipContent>
+              </Tooltip>
+            )}
+
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button
                   size="sm"
                   variant={isRunning ? 'destructive' : 'default'}
                   onClick={handleRun}
-                  disabled={!wasmReady || !isAssembled || isHalted}
+                  disabled={!wasmReady || !isAssembled || isHalted || needsOsBoot}
                   className="gap-1.5"
                 >
                   {isRunning ? (
@@ -161,7 +187,7 @@ export function ControlPanel() {
                   size="sm"
                   variant="outline"
                   onClick={handleStep}
-                  disabled={!wasmReady || !isAssembled || isRunning || isHalted}
+                  disabled={!wasmReady || !isAssembled || isRunning || isHalted || needsOsBoot}
                   className="gap-1.5"
                 >
                   <SkipForward className="h-4 w-4" />
