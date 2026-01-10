@@ -1,4 +1,5 @@
 import { Store } from '@tanstack/store'
+import { getOSBytes, markOSLoaded, markOSUnloaded } from './os-store'
 
 // Types for WASM module
 export interface StepResult {
@@ -104,6 +105,29 @@ let wasInstantMode = false
 // Promise to track ongoing initialization
 let initPromise: Promise<void> | null = null
 
+/**
+ * Load the configured OS into the VM.
+ * This should be called after vm.reset() and before loading user programs.
+ */
+async function loadOSIntoVM(): Promise<void> {
+  if (!vm) return
+
+  const osBytes = await getOSBytes()
+  if (osBytes) {
+    try {
+      vm.load_os_bytes(osBytes)
+      vm.set_os_mode(true)
+      vm.init_mcr()
+      markOSLoaded()
+    } catch (e) {
+      console.error('Failed to load OS:', e)
+      vm.set_os_mode(false)
+    }
+  } else {
+    vm.set_os_mode(false)
+  }
+}
+
 export async function initWasm() {
   // Return existing promise if initialization is in progress
   if (initPromise) return initPromise
@@ -151,7 +175,7 @@ export function updateSourceCode(code: string, markAsChanged = true) {
   }
 }
 
-export function assemble(): boolean {
+export async function assemble(): Promise<boolean> {
   if (!wasmModule || !vm) return false
 
   const state = lc3Store.state
@@ -201,8 +225,11 @@ export function assemble(): boolean {
     currentAddr++
   }
 
-  // Reset VM and load program
+  // Reset VM and load OS if configured
   vm.reset()
+  await loadOSIntoVM()
+  
+  // Load user program
   const program = new Uint16Array(result.code)
   vm.load(origin, program)
 
@@ -348,6 +375,7 @@ export function stop() {
   if (!vm) return
 
   vm.reset()
+  markOSUnloaded() // OS needs to be reloaded on next assemble
   lc3Store.setState((s) => ({
     ...s,
     isRunning: false,
@@ -428,18 +456,68 @@ function startAutoRun() {
 
   if (stepSpeed === 0) {
     // Instant mode: use VM's native run() function for maximum speed
-    // This runs until halt, I/O, or error in native WASM
+    // This runs until halt, I/O request, or error in native WASM
     if (!vm) return
 
     wasInstantMode = true
-    const result = vm.run() as StepResult
-    updateVMState()
-    handleStepResult(result)
     
-    // Only clear isRunning if we're not waiting for input (so we can resume)
-    if (!lc3Store.state.waitingForInput) {
-      lc3Store.setState((s) => ({ ...s, isRunning: false }))
-      wasInstantMode = false
+    // Loop until we need to stop (halt, input request, or error)
+    while (true) {
+      const result = vm.run() as StepResult
+      updateVMState()
+      
+      // Handle the result
+      switch (result.type) {
+        case 'None':
+          // Should not happen since run() only returns on events
+          continue
+
+        case 'Output':
+          lc3Store.setState((s) => ({
+            ...s,
+            consoleOutput: s.consoleOutput + String.fromCharCode(result.data as number),
+          }))
+          continue // Keep running after output
+
+        case 'OutputString':
+          const chars = (result.data as number[]).map((c) => String.fromCharCode(c)).join('')
+          lc3Store.setState((s) => ({
+            ...s,
+            consoleOutput: s.consoleOutput + chars,
+          }))
+          continue // Keep running after output
+
+        case 'Halt':
+          lc3Store.setState((s) => ({
+            ...s,
+            isHalted: true,
+            isRunning: false,
+          }))
+          wasInstantMode = false
+          return // Stop the loop
+
+        case 'ReadChar':
+          lc3Store.setState((s) => ({
+            ...s,
+            waitingForInput: true,
+            isRunning: false,
+          }))
+          // Don't clear wasInstantMode so we can resume after input
+          return // Stop the loop, will resume after input
+
+        case 'Error':
+          lc3Store.setState((s) => ({
+            ...s,
+            consoleOutput: s.consoleOutput + `Error: ${result.data}\n`,
+            isHalted: true,
+            isRunning: false,
+          }))
+          wasInstantMode = false
+          return // Stop the loop
+
+        default:
+          continue
+      }
     }
   } else {
     // Normal mode: use setInterval with specified delay

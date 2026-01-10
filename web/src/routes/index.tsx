@@ -16,6 +16,7 @@ import { ConsolePanel } from '@/components/ConsolePanel'
 import { MemoryPanel } from '@/components/MemoryPanel'
 import { FileToolbar } from '@/components/FileToolbar'
 import { FileBrowser } from '@/components/FileBrowser'
+import { AdvancedMenu } from '@/components/AdvancedMenu'
 import { initWasm } from '@/lib/lc3-store'
 import { initFileManager, saveCurrentFile, fileManagerStore, toggleSidebar, loadSharedCode } from '@/lib/file-manager'
 import { Button } from '@/components/ui/button'
@@ -111,6 +112,8 @@ function IDE() {
           </div>
           <div className="h-4 w-px bg-zinc-700" />
           <FileToolbar />
+          <div className="h-4 w-px bg-zinc-700" />
+          <AdvancedMenu />
         </div>
         <div className="flex items-center gap-2">
           <Button

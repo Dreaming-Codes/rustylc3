@@ -44,8 +44,8 @@ export function ControlPanel() {
   const hasBreakpoints = breakpoints.size > 0
   const isInstantMode = stepSpeed === 0
 
-  const handleAssemble = useCallback(() => {
-    assemble()
+  const handleAssemble = useCallback(async () => {
+    await assemble()
   }, [])
 
   const handleRun = useCallback(() => {
