@@ -27,7 +27,6 @@ export interface LC3State {
   isPaused: boolean
   waitingForInput: boolean
   isAssembled: boolean // Whether a program is loaded
-  needsOsBoot: boolean // Whether OS boot is needed before running
 
   // Registers (R0-R7)
   registers: number[]
@@ -84,7 +83,6 @@ export const lc3Store = new Store<LC3State>({
   isPaused: false,
   waitingForInput: false,
   isAssembled: false,
-  needsOsBoot: false,
   registers: [0, 0, 0, 0, 0, 0, 0, 0],
   prevRegisters: [0, 0, 0, 0, 0, 0, 0, 0],
   changedRegisters: new Set(),
@@ -247,21 +245,17 @@ export async function assemble(): Promise<boolean> {
   const program = new Uint16Array(result.code)
   vm.load(origin, program)
 
-  // If OS is loaded, set up for OS boot (user must press Boot OS button)
+  // Set up initial state like lc3tools does (skip running OS boot code)
+  // This directly sets PC/PSR/R6 to user mode without executing OS_START
   if (osLoaded) {
-    // Patch the OS to jump to our program's origin instead of x3000
-    // USER_PC is at x020A (OS_START at x0200 + 10 words: 8 instructions + OS_SP + USER_PSR)
-    vm.set_mem(0x020A, origin)
+    // Set PC to user program origin
+    vm.set_pc(origin)
     
-    // Set supervisor mode (PSR bit 15 = 0) so OS startup code can execute RTI
-    // PSR: 0x0002 = supervisor mode, Z flag set
-    vm.set_psr(0x0002)
+    // Set user mode with Z flag: PSR = x8002
+    // Bit 15 = 1 (user mode), Bits 2:0 = 010 (Z flag)
+    vm.set_psr(0x8002)
     
-    // Initialize R6 (stack pointer) to x3000, matching lc3tools initial state
-    vm.set_reg(6, 0x3000)
-    
-    // Start at OS entry point - user must press Boot OS to run
-    vm.set_pc(0x0200)
+    // R6 stays at 0 (matches lc3tools behavior - user programs set their own stack)
   }
 
   // Build symbol table from analyze_symbols
@@ -289,71 +283,16 @@ export async function assemble(): Promise<boolean> {
     isHalted: false,
     isPaused: false,
     isAssembled: true,
-    needsOsBoot: osLoaded,
     waitingForInput: false,
     registers: Array.from(vm!.regs()),
     prevRegisters: [0, 0, 0, 0, 0, 0, 0, 0],
     changedRegisters: new Set(),
     conditionCode: vm!.cond_str(),
-    consoleOutput: s.consoleOutput + `Assembled successfully. Origin: x${origin.toString(16).toUpperCase()}${osLoaded ? ' (Boot OS to run)' : ''}\n`,
+    consoleOutput: s.consoleOutput + `Assembled successfully. Origin: x${origin.toString(16).toUpperCase()}\n`,
     pcToLine,
     lineToPC,
     symbolTable,
   }))
-
-  return true
-}
-
-/**
- * Boot the OS - runs the OS startup code which initializes R6 and transitions to user mode.
- * This should be called after assemble() when OS mode is enabled.
- */
-export function bootOs(): boolean {
-  if (!vm) return false
-
-  const state = lc3Store.state
-  if (!state.needsOsBoot || state.isRunning) return false
-
-  // Run OS startup until we reach user mode (RTI completes)
-  // The OS startup code is short: LD, LD, ADD, STR, LD, ADD, STR, RTI (8 instructions)
-  let maxSteps = 20 // Safety limit
-  while (maxSteps-- > 0) {
-    const psr = vm.psr()
-    const isUserMode = (psr & 0x8000) !== 0
-    if (isUserMode) break // RTI completed, now in user mode
-
-    const stepResult = vm.step() as StepResult
-    if (stepResult.type === 'Halt' || stepResult.type === 'Error') {
-      lc3Store.setState((s) => ({
-        ...s,
-        consoleOutput: s.consoleOutput + `OS boot error\n`,
-      }))
-      return false
-    }
-  }
-
-  // Update state after boot
-  lc3Store.setState((s) => ({
-    ...s,
-    needsOsBoot: false,
-    pc: vm!.pc(),
-    prevPc: vm!.pc(),
-    psr: vm!.psr(),
-    mcr: vm!.mcr(),
-    registers: Array.from(vm!.regs()),
-    prevRegisters: s.registers,
-    changedRegisters: new Set([6]), // R6 changes during boot
-    conditionCode: vm!.cond_str(),
-    consoleOutput: s.consoleOutput + `OS booted. Ready to run.\n`,
-  }))
-
-  // Clear changed indicators after animation
-  setTimeout(() => {
-    lc3Store.setState((s) => ({
-      ...s,
-      changedRegisters: new Set(),
-    }))
-  }, 300)
 
   return true
 }
@@ -512,7 +451,6 @@ export function stop() {
     isHalted: false,
     isPaused: false,
     isAssembled: false,
-    needsOsBoot: false,
     waitingForInput: false,
     registers: [0, 0, 0, 0, 0, 0, 0, 0],
     prevRegisters: [0, 0, 0, 0, 0, 0, 0, 0],
