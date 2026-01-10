@@ -72,11 +72,21 @@ impl std::fmt::Display for AssemblyError {
 
 impl std::error::Error for AssemblyError {}
 
+/// A segment of assembled code with its origin address.
+#[derive(Debug, Clone)]
+pub struct Segment {
+    /// Origin address for this segment.
+    pub origin: u16,
+    /// Machine code words in this segment.
+    pub code: Vec<u16>,
+}
+
 /// Two-pass LC-3 assembler.
 #[derive(Debug, Default)]
 pub struct Assembler {
     symbols: HashMap<String, u16>,
     origin: u16,
+    segments: Vec<Segment>,
 }
 
 impl Assembler {
@@ -84,20 +94,30 @@ impl Assembler {
         Self::default()
     }
 
-    /// Get the origin address (set by .ORIG directive during assembly).
+    /// Get the first origin address (set by first .ORIG directive during assembly).
     pub fn origin(&self) -> u16 {
         self.origin
     }
 
+    /// Get all assembled segments.
+    /// Each segment has its own origin and code.
+    pub fn segments(&self) -> &[Segment] {
+        &self.segments
+    }
+
     /// Assemble source code into machine code words.
+    /// For multi-segment programs, this returns all segments concatenated.
+    /// Use `assemble_segments` for proper multi-segment handling.
     pub fn assemble(&mut self, source: &str) -> Result<Vec<u16>, String> {
         self.assemble_with_errors(source).map_err(|e| e.to_string())
     }
 
     /// Assemble with detailed error information.
+    /// For multi-segment programs, this returns all segments concatenated.
     pub fn assemble_with_errors(&mut self, source: &str) -> Result<Vec<u16>, AssemblyError> {
         self.symbols.clear();
         self.origin = 0x3000;
+        self.segments.clear();
 
         let program = parse(source).map_err(AssemblyError::ParseErrors)?;
 
@@ -105,8 +125,43 @@ impl Assembler {
         self.first_pass(&program, source, &mut errors);
         let code = self.second_pass(&program, source, &mut errors);
 
+        // Store in segments (single segment for backward compatibility)
+        if !code.is_empty() {
+            self.segments.push(Segment {
+                origin: self.origin,
+                code: code.clone(),
+            });
+        }
+
         if errors.is_empty() {
             Ok(code)
+        } else {
+            Err(AssemblyError::SemanticErrors(errors))
+        }
+    }
+
+    /// Assemble and return separate segments with their origins.
+    pub fn assemble_segments(&mut self, source: &str) -> Result<Vec<Segment>, AssemblyError> {
+        self.symbols.clear();
+        self.origin = 0x3000;
+        self.segments.clear();
+
+        let program = parse(source).map_err(AssemblyError::ParseErrors)?;
+
+        let mut errors = Vec::new();
+        self.first_pass(&program, source, &mut errors);
+        let code = self.second_pass(&program, source, &mut errors);
+
+        // Store in segments
+        if !code.is_empty() {
+            self.segments.push(Segment {
+                origin: self.origin,
+                code,
+            });
+        }
+
+        if errors.is_empty() {
+            Ok(self.segments.clone())
         } else {
             Err(AssemblyError::SemanticErrors(errors))
         }

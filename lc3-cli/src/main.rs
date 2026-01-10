@@ -39,9 +39,9 @@ fn main() {
 fn assemble(input: &str, output: Option<String>) {
     let output = output.unwrap_or_else(|| {
         if input.ends_with(".asm") {
-            input.replace(".asm", ".bin")
+            input.replace(".asm", ".obj")
         } else {
-            format!("{input}.bin")
+            format!("{input}.obj")
         }
     });
 
@@ -59,17 +59,27 @@ fn assemble(input: &str, output: Option<String>) {
         }
     };
 
-    let binary: Vec<u8> = code
-        .iter()
-        .flat_map(|w| [(w >> 8) as u8, *w as u8])
-        .collect();
+    let origin = asm.origin();
+    let mut binary: Vec<u8> = Vec::with_capacity(2 + code.len() * 2);
+    // Add origin header
+    binary.push((origin >> 8) as u8);
+    binary.push(origin as u8);
+    // Add code words
+    for w in &code {
+        binary.push((w >> 8) as u8);
+        binary.push(*w as u8);
+    }
 
     fs::write(&output, binary).unwrap_or_else(|e| {
         eprintln!("Error writing '{output}': {e}");
         process::exit(1);
     });
 
-    println!("Assembled {} words to {output}", code.len());
+    println!(
+        "Assembled {} words to {output} (origin: x{:04X})",
+        code.len(),
+        origin
+    );
 }
 
 fn run(path: &str) {
@@ -78,15 +88,25 @@ fn run(path: &str) {
         process::exit(1);
     });
 
-    if !data.len().is_multiple_of(2) {
-        eprintln!("Error: invalid binary file (odd byte count)");
+    if data.len() < 2 || !data.len().is_multiple_of(2) {
+        eprintln!(
+            "Error: invalid binary file (must have even byte count with at least 2 bytes for origin)"
+        );
         process::exit(1);
     }
 
+    // First word is the origin address
+    let origin = (data[0] as u16) << 8 | data[1] as u16;
+
     let mut vm = LC3::default();
-    for (i, chunk) in data.chunks(2).enumerate() {
-        vm.memory[0x3000 + i] = (chunk[0] as u16) << 8 | chunk[1] as u16;
+
+    // Load code starting after the origin header
+    for (i, chunk) in data[2..].chunks(2).enumerate() {
+        vm.memory[origin as usize + i] = (chunk[0] as u16) << 8 | chunk[1] as u16;
     }
+
+    // Set PC to the origin
+    vm.pc = origin;
 
     println!("Starting at x{:04X}...\n", vm.pc);
 
@@ -120,6 +140,9 @@ fn run(path: &str) {
                     VMError::ReservedOpcode(op) => format!("Reserved opcode: {op:#06b}"),
                     VMError::UnimplementedTrap(vec) => {
                         format!("Unimplemented TRAP vector: {vec:#04x}")
+                    }
+                    VMError::PrivilegeViolation => {
+                        "Privilege violation: RTI in user mode".to_string()
                     }
                 };
                 eprintln!("\nError at PC x{:04X}: {}", vm.pc.wrapping_sub(1), msg);
