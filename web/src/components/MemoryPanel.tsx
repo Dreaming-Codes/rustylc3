@@ -1,7 +1,7 @@
 import { useStore } from '@tanstack/react-store'
 import { useState, useCallback, useEffect } from 'react'
 import { Database, ChevronUp, ChevronDown } from 'lucide-react'
-import { lc3Store, getMemory } from '@/lib/lc3-store'
+import { lc3Store, getMemory, disassembleMemory } from '@/lib/lc3-store'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -13,6 +13,25 @@ function formatHex4(value: number): string {
 
 const ROWS_TO_SHOW = 16
 
+// Check if a value is a printable ASCII character
+function isPrintableChar(value: number): boolean {
+  return value >= 32 && value <= 126
+}
+
+// Check if the value looks like character data rather than code
+// LC-3 instructions typically have opcodes in the high bits
+// Printable ASCII is 32-126, which means the high byte is 0x00
+// and the value is small - this strongly suggests character data
+function isLikelyCharData(value: number): boolean {
+  return value >= 0 && value <= 127
+}
+
+// Check if the disassembled instruction looks like data (not real code)
+function isDataInstruction(instruction: string): boolean {
+  // .FILL means the disassembler couldn't decode it as a valid instruction
+  return instruction.startsWith('.FILL')
+}
+
 export function MemoryPanel() {
   const pc = useStore(lc3Store, (s) => s.pc)
   const origin = useStore(lc3Store, (s) => s.origin)
@@ -21,11 +40,16 @@ export function MemoryPanel() {
 
   const [startAddr, setStartAddr] = useState(0x3000)
   const [memory, setMemory] = useState<number[]>([])
+  const [instructions, setInstructions] = useState<string[]>([])
 
   // Update memory when PC changes, after assembly, or manually
   useEffect(() => {
     if (wasmReady) {
-      setMemory(getMemory(startAddr, ROWS_TO_SHOW))
+      const mem = getMemory(startAddr, ROWS_TO_SHOW)
+      setMemory(mem)
+      // Disassemble the memory range
+      const disasm = disassembleMemory(startAddr, ROWS_TO_SHOW)
+      setInstructions(disasm)
     }
   }, [startAddr, pc, wasmReady, isAssembled])
 
@@ -126,30 +150,38 @@ export function MemoryPanel() {
           </Button>
         </div>
 
-        {/* Memory grid */}
+        {/* Memory table */}
         <ScrollArea className="flex-1 rounded-md bg-black/30">
           <div className="p-2">
             {/* Header */}
-            <div className="mb-1 grid grid-cols-3 gap-2 text-xs font-medium text-zinc-500">
+            <div className="mb-1 grid grid-cols-[70px_60px_55px_1fr] gap-1 text-xs font-medium text-zinc-500">
               <span>Addr</span>
-              <span>Value</span>
-              <span>Char</span>
+              <span>Hex</span>
+              <span>Dec</span>
+              <span>Instruction</span>
             </div>
 
             {/* Memory rows */}
             {memory.map((value, i) => {
               const addr = startAddr + i
               const isPC = addr === pc
-              const char =
-                value >= 32 && value <= 126
+              const instruction = instructions[i] || ''
+              
+              // Determine what to show in the last column:
+              // - For data (.FILL or small values that look like ASCII): show character
+              // - For real instructions: show the disassembled instruction
+              const isData = isDataInstruction(instruction) || isLikelyCharData(value)
+              const displayValue = isData
+                ? isPrintableChar(value)
                   ? String.fromCharCode(value)
-                  : '.'
+                  : ''
+                : instruction
 
               return (
                 <div
                   key={addr}
                   className={cn(
-                    'grid grid-cols-3 gap-2 rounded px-1 py-0.5 font-mono text-xs transition-colors',
+                    'grid grid-cols-[70px_60px_55px_1fr] gap-1 rounded px-1 py-0.5 font-mono text-xs transition-colors',
                     isPC && 'bg-blue-500/20 ring-1 ring-blue-500/50'
                   )}
                 >
@@ -164,7 +196,19 @@ export function MemoryPanel() {
                   <span className={cn('text-zinc-300', isPC && 'text-blue-200')}>
                     {formatHex4(value)}
                   </span>
-                  <span className="text-zinc-600">{char}</span>
+                  <span className={cn('text-zinc-400', isPC && 'text-blue-200')}>
+                    {value}
+                  </span>
+                  <span
+                    className={cn(
+                      'truncate',
+                      isData ? 'italic text-zinc-400' : 'text-cyan-400',
+                      isPC && (isData ? 'text-blue-200' : 'text-cyan-300')
+                    )}
+                    title={instruction}
+                  >
+                    {displayValue}
+                  </span>
                 </div>
               )
             })}

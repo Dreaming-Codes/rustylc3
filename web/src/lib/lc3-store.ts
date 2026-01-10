@@ -52,6 +52,9 @@ export interface LC3State {
   pcToLine: Map<number, number>
   lineToPC: Map<number, number>
 
+  // Symbol table (address -> label name)
+  symbolTable: Map<number, string>
+
   // WASM initialization state
   wasmReady: boolean
 }
@@ -90,6 +93,7 @@ export const lc3Store = new Store<LC3State>({
   origin: 0x3000,
   pcToLine: new Map(),
   lineToPC: new Map(),
+  symbolTable: new Map(),
   wasmReady: false,
 })
 
@@ -233,6 +237,21 @@ export async function assemble(): Promise<boolean> {
   const program = new Uint16Array(result.code)
   vm.load(origin, program)
 
+  // Build symbol table from analyze_symbols
+  const symbolTable = new Map<number, string>()
+  const symbols = wasmModule.analyze_symbols(state.sourceCode) as Array<{
+    name: string
+    kind: string
+    address?: string
+  }>
+  for (const sym of symbols) {
+    if (sym.address) {
+      // address is like "x3000", parse it
+      const addr = parseInt(sym.address.slice(1), 16)
+      symbolTable.set(addr, sym.name)
+    }
+  }
+
   lc3Store.setState((s) => ({
     ...s,
     origin,
@@ -249,6 +268,7 @@ export async function assemble(): Promise<boolean> {
     consoleOutput: s.consoleOutput + `Assembled successfully. Origin: x${origin.toString(16).toUpperCase()}\n`,
     pcToLine,
     lineToPC,
+    symbolTable,
   }))
 
   return true
@@ -558,6 +578,22 @@ export function getMemory(start: number, length: number): number[] {
 export function getMemoryValue(addr: number): number {
   if (!vm) return 0
   return vm.mem(addr)
+}
+
+// Disassemble memory range
+export function disassembleMemory(start: number, length: number): string[] {
+  if (!wasmModule || !vm) return []
+  
+  const memory = vm.mem_slice(start, length)
+  const symbolTable = lc3Store.state.symbolTable
+  
+  // Convert Map<number, string> to object for WASM
+  const symbolObj: Record<number, string> = {}
+  for (const [addr, name] of symbolTable) {
+    symbolObj[addr] = name
+  }
+  
+  return Array.from(wasmModule.disassemble_range_with_symbols(memory, start, symbolObj))
 }
 
 // Get current line from PC
