@@ -5,8 +5,9 @@
   "scripts": {
     "build:wasm": "wasm-pack build ../lc3-wasm --target web --out-dir ../web/src/wasm --release",
     "build:wasm:dev": "wasm-pack build ../lc3-wasm --target web --out-dir ../web/src/wasm --dev",
+    "build:os": "cargo run --release --manifest-path ../Cargo.toml -- assemble ../os/lc3os.asm public/lc3os.obj",
     "dev": "bun run build:wasm:dev && vite --port 3000",
-    "build": "bun run build:wasm && vite build && tsc",
+    "build": "bun run build:os && bun run build:wasm && vite build && tsc",
     "preview": "vite preview",
     "test": "vitest run",
     "lint": "oxlint",
