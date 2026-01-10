@@ -395,7 +395,6 @@ impl LC3 {
 
         if self.os_mode {
             // Full OS mode: jump to trap vector, switch to supervisor mode
-            self.regs[7] = self.pc;
 
             // If in user mode, switch to supervisor mode
             if !self.is_supervisor() {
