@@ -286,10 +286,24 @@ fn identifier<'a>() -> impl Parser<'a, ParserInput<'a>, Spanned<String>, ParserE
 }
 
 fn string_literal<'a>() -> impl Parser<'a, ParserInput<'a>, String, ParserExtra<'a>> + Clone {
+    let escape = just('\\').ignore_then(choice((
+        just('n').to('\n'),
+        just('r').to('\r'),
+        just('t').to('\t'),
+        just('\\').to('\\'),
+        just('"').to('"'),
+        just('0').to('\0'),
+    )));
+
+    let regular_char = none_of("\\\"");
+
     just('"')
-        .ignore_then(none_of('"').repeated().to_slice())
+        .ignore_then(
+            choice((escape, regular_char))
+                .repeated()
+                .collect::<String>(),
+        )
         .then_ignore(just('"'))
-        .map(|s: &str| s.to_string())
         .labelled("string")
 }
 
