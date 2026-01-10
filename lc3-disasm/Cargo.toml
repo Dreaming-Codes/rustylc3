@@ -1,0 +1,7 @@
+[package]
+name = "lc3-disasm"
+version = "0.1.0"
+edition = "2024"
+description = "LC-3 disassembler - converts machine code to assembly"
+
+[dependencies]

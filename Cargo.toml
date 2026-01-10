@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["lc3-core", "lc3-parser", "lc3-assembler", "lc3-cli", "lc3-wasm", "lc3-analysis"]
+members = ["lc3-core", "lc3-parser", "lc3-assembler", "lc3-cli", "lc3-wasm", "lc3-analysis", "lc3-disasm"]
 
 [profile.release]
 opt-level = 3

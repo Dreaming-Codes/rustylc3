@@ -10,6 +10,7 @@ crate-type = ["cdylib", "rlib"]
 lc3-core = { path = "../lc3-core" }
 lc3-assembler = { path = "../lc3-assembler" }
 lc3-analysis = { path = "../lc3-analysis" }
+lc3-disasm = { path = "../lc3-disasm" }
 wasm-bindgen = "0.2"
 serde = { version = "1", features = ["derive"] }
 serde-wasm-bindgen = "0.6"

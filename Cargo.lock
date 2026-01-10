@@ -259,6 +259,10 @@ name = "lc3-core"
 version = "0.1.0"
 
 [[package]]
+name = "lc3-disasm"
+version = "0.1.0"
+
+[[package]]
 name = "lc3-parser"
 version = "0.1.0"
 dependencies = [
@@ -275,6 +279,7 @@ dependencies = [
  "lc3-analysis",
  "lc3-assembler",
  "lc3-core",
+ "lc3-disasm",
  "serde",
  "serde-wasm-bindgen",
  "wasm-bindgen",

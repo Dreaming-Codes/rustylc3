@@ -619,3 +619,101 @@ struct MonacoSemanticToken {
     length: u32,
     token_type: &'static str,
 }
+
+// ============================================================================
+// Disassembler Functions
+// ============================================================================
+
+/// Disassemble a single LC-3 instruction.
+///
+/// # Arguments
+/// * `instr` - The 16-bit instruction value
+/// * `pc` - The address of the *next* instruction (address of this instruction + 1)
+///
+/// # Returns
+/// Human-readable assembly instruction string
+#[wasm_bindgen]
+pub fn disassemble(instr: u16, pc: u16) -> String {
+    lc3_disasm::disassemble_simple(instr, pc)
+}
+
+/// Disassemble a single LC-3 instruction with symbol table.
+///
+/// # Arguments
+/// * `instr` - The 16-bit instruction value
+/// * `pc` - The address of the *next* instruction (address of this instruction + 1)
+/// * `symbols` - JavaScript object mapping addresses (as numbers) to label names (as strings)
+///
+/// # Returns
+/// Human-readable assembly instruction string with labels resolved
+#[wasm_bindgen]
+pub fn disassemble_with_symbols(instr: u16, pc: u16, symbols: JsValue) -> String {
+    // Try to convert JsValue to a HashMap
+    if symbols.is_null() || symbols.is_undefined() {
+        return lc3_disasm::disassemble_simple(instr, pc);
+    }
+
+    // Parse symbols from JsValue - expects { address: label } format
+    let symbol_map: Result<std::collections::HashMap<u16, String>, _> =
+        serde_wasm_bindgen::from_value(symbols);
+
+    match symbol_map {
+        Ok(map) => lc3_disasm::disassemble(instr, pc, Some(&map)),
+        Err(_) => lc3_disasm::disassemble_simple(instr, pc),
+    }
+}
+
+/// Disassemble a range of memory.
+///
+/// # Arguments
+/// * `memory` - Array of 16-bit values
+/// * `start_addr` - Starting address of the memory range
+///
+/// # Returns
+/// Array of disassembled instruction strings
+#[wasm_bindgen]
+pub fn disassemble_range(memory: &[u16], start_addr: u16) -> Vec<String> {
+    memory
+        .iter()
+        .enumerate()
+        .map(|(i, &instr)| {
+            let addr = start_addr.wrapping_add(i as u16);
+            let pc = addr.wrapping_add(1); // PC points to next instruction
+            lc3_disasm::disassemble_simple(instr, pc)
+        })
+        .collect()
+}
+
+/// Disassemble a range of memory with symbol table.
+///
+/// # Arguments
+/// * `memory` - Array of 16-bit values
+/// * `start_addr` - Starting address of the memory range
+/// * `symbols` - JavaScript object mapping addresses (as numbers) to label names (as strings)
+///
+/// # Returns
+/// Array of disassembled instruction strings with labels resolved
+#[wasm_bindgen]
+pub fn disassemble_range_with_symbols(
+    memory: &[u16],
+    start_addr: u16,
+    symbols: JsValue,
+) -> Vec<String> {
+    // Parse symbols from JsValue
+    let symbol_map: Option<std::collections::HashMap<u16, String>> =
+        if symbols.is_null() || symbols.is_undefined() {
+            None
+        } else {
+            serde_wasm_bindgen::from_value(symbols).ok()
+        };
+
+    memory
+        .iter()
+        .enumerate()
+        .map(|(i, &instr)| {
+            let addr = start_addr.wrapping_add(i as u16);
+            let pc = addr.wrapping_add(1);
+            lc3_disasm::disassemble(instr, pc, symbol_map.as_ref())
+        })
+        .collect()
+}
