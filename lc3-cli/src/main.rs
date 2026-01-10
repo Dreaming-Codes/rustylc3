@@ -17,13 +17,16 @@ enum Command {
     Assemble {
         /// Input assembly file
         input: String,
-        /// Output binary file (defaults to input with .bin extension)
+        /// Output binary file (defaults to input with .obj extension)
         output: Option<String>,
     },
     /// Run an LC-3 binary program
     Run {
         /// Binary file to execute
         program: String,
+        /// Path to OS image (optional)
+        #[arg(long)]
+        os: Option<String>,
     },
 }
 
@@ -32,7 +35,7 @@ fn main() {
 
     match cli.command {
         Command::Assemble { input, output } => assemble(&input, output),
-        Command::Run { program } => run(&program),
+        Command::Run { program, os } => run(&program, os),
     }
 }
 
@@ -135,13 +138,29 @@ fn load_obj_file(vm: &mut LC3, data: &[u8]) -> Result<u16, String> {
     }
 }
 
-fn run(path: &str) {
+fn run(path: &str, os_path: Option<String>) {
     let data = fs::read(path).unwrap_or_else(|e| {
         eprintln!("Error reading '{path}': {e}");
         process::exit(1);
     });
 
     let mut vm = LC3::default();
+
+    // If OS is provided, load it and enable OS mode
+    if let Some(os_p) = os_path {
+        let os_data = fs::read(&os_p).unwrap_or_else(|e| {
+            eprintln!("Error reading OS image '{os_p}': {e}");
+            process::exit(1);
+        });
+        load_obj_file(&mut vm, &os_data).unwrap_or_else(|e| {
+            eprintln!("Error loading OS: {e}");
+            process::exit(1);
+        });
+        vm.set_os_mode(true);
+        // Initialize MCR
+        vm.memory[0xFFFE] = 0x8000;
+        println!("Loaded OS from {os_p}");
+    }
 
     let start_pc = match load_obj_file(&mut vm, &data) {
         Ok(pc) => pc,
@@ -153,7 +172,11 @@ fn run(path: &str) {
 
     vm.pc = start_pc;
 
-    println!("Starting at x{:04X}...\n", vm.pc);
+    println!(
+        "Starting at x{:04X} (OS mode: {})...\n",
+        vm.pc,
+        vm.os_mode()
+    );
 
     let stdin = io::stdin();
     let mut stdout = io::stdout();
