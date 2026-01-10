@@ -364,15 +364,39 @@ function handleStepResult(result: StepResult): boolean {
   }
 }
 
+/**
+ * Check if the VM is currently in supervisor mode (executing OS code).
+ * PSR bit 15: 0 = supervisor mode, 1 = user mode
+ */
+function isInSupervisorMode(): boolean {
+  if (!vm) return false
+  const psr = vm.psr()
+  return (psr & 0x8000) === 0
+}
+
 export function step(): boolean {
   if (!vm) return false
 
   const state = lc3Store.state
   if (!state.isAssembled || state.isHalted || state.waitingForInput) return false
 
-  const result = vm.step() as StepResult
+  // Execute the first step
+  let result = vm.step() as StepResult
   updateVMState()
-  return handleStepResult(result)
+  if (!handleStepResult(result)) return false
+
+  // If we entered supervisor mode (OS interrupt/trap), keep stepping until we return to user mode
+  // This allows stepping through user code only, skipping OS interrupt handlers
+  while (isInSupervisorMode()) {
+    const currentState = lc3Store.state
+    if (currentState.isHalted || currentState.waitingForInput) break
+
+    result = vm.step() as StepResult
+    updateVMState()
+    if (!handleStepResult(result)) return false
+  }
+
+  return true
 }
 
 export function run() {
