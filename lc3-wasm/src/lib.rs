@@ -37,6 +37,7 @@ impl From<VMEvent> for StepResult {
             VMEvent::Error(e) => StepResult::Error(match e {
                 VMError::ReservedOpcode(op) => format!("Reserved opcode: {op:#06b}"),
                 VMError::UnimplementedTrap(vec) => format!("Unimplemented TRAP vector: {vec:#04x}"),
+                VMError::PrivilegeViolation => "Privilege violation: RTI in user mode".to_string(),
             }),
         }
     }
@@ -114,7 +115,69 @@ impl WasmLC3 {
     ///
     /// Call this after receiving a `ReadChar` event, then continue execution.
     pub fn set_input(&mut self, c: u8) {
-        self.vm.regs[0] = c as u16;
+        if self.vm.os_mode() {
+            // In OS mode, set keyboard buffer for MMIO
+            self.vm.set_keyboard_input(c);
+        } else {
+            // In shortcut mode, set R0 directly
+            self.vm.regs[0] = c as u16;
+        }
+    }
+
+    /// Enable or disable OS mode.
+    ///
+    /// When enabled, TRAPs jump to actual trap vectors in memory and RTI works properly.
+    /// When disabled, TRAPs are handled with shortcut behavior (no OS required).
+    pub fn set_os_mode(&mut self, enabled: bool) {
+        self.vm.set_os_mode(enabled);
+    }
+
+    /// Check if OS mode is enabled.
+    pub fn os_mode(&self) -> bool {
+        self.vm.os_mode()
+    }
+
+    /// Get the Processor Status Register (PSR).
+    ///
+    /// Bit 15: privilege mode (0 = supervisor, 1 = user)
+    /// Bits 10-8: priority level
+    /// Bits 2-0: condition codes (N=4, Z=2, P=1)
+    pub fn psr(&self) -> u16 {
+        self.vm.psr()
+    }
+
+    /// Set the Processor Status Register (PSR).
+    pub fn set_psr(&mut self, psr: u16) {
+        self.vm.set_psr(psr);
+    }
+
+    /// Load an OS image from raw bytes without changing PC.
+    ///
+    /// This is used to load the operating system before loading a user program.
+    /// Unlike load_bytes, this does not change the PC.
+    pub fn load_os_bytes(&mut self, bytes: &[u8]) -> Result<(), JsError> {
+        if bytes.len() < 2 {
+            return Err(JsError::new("OS image too short"));
+        }
+        if bytes.len() % 2 != 0 {
+            return Err(JsError::new("OS image must have even number of bytes"));
+        }
+
+        let origin = u16::from_be_bytes([bytes[0], bytes[1]]);
+        // Don't change PC - the OS is loaded but we'll start at user program location
+
+        for (i, chunk) in bytes[2..].chunks(2).enumerate() {
+            let word = u16::from_be_bytes([chunk[0], chunk[1]]);
+            self.vm.memory[origin as usize + i] = word;
+        }
+
+        Ok(())
+    }
+
+    /// Initialize MCR with clock running (bit 15 = 1).
+    /// This should be called after loading the OS but before running.
+    pub fn init_mcr(&mut self) {
+        self.vm.memory[0xFFFE] = 0x8000;
     }
 
     /// Get the current program counter.
