@@ -191,14 +191,13 @@ export async function assemble(): Promise<boolean> {
   if (!wasmModule || !vm) return false
 
   const state = lc3Store.state
-  const result = wasmModule.assemble(state.sourceCode) as {
+  const result = wasmModule.assemble_with_segments(state.sourceCode) as {
     success: boolean
-    code?: number[]
-    origin?: number
+    segments?: Array<{ origin: number; code: number[] }>
     error?: string
   }
 
-  if (!result.success || !result.code) {
+  if (!result.success || !result.segments || result.segments.length === 0) {
     lc3Store.setState((s) => ({
       ...s,
       consoleOutput: s.consoleOutput + `Assembly error: ${result.error}\n`,
@@ -206,26 +205,40 @@ export async function assemble(): Promise<boolean> {
     return false
   }
 
-  const origin = result.origin ?? 0x3000
+  // First segment's origin is the main program origin
+  const origin = result.segments[0].origin
 
-  // Build line mapping
+  // Build line mapping - need to handle multiple segments
   const lines = state.sourceCode.split('\n')
   const pcToLine = new Map<number, number>()
   const lineToPC = new Map<number, number>()
 
   let currentAddr = origin
+  let inSegment = false
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i].trim()
     if (!line || line.startsWith(';')) continue
 
-    // Check for .ORIG directive - just skip it, origin is already known
-    if (line.match(/\.ORIG\s+/i)) {
+    // Check for .ORIG directive - update currentAddr for new segment
+    const origMatch = line.match(/\.ORIG\s+(?:x([0-9A-Fa-f]+)|#?(\d+))/i)
+    if (origMatch) {
+      if (origMatch[1]) {
+        currentAddr = parseInt(origMatch[1], 16)
+      } else if (origMatch[2]) {
+        currentAddr = parseInt(origMatch[2], 10)
+      }
+      inSegment = true
       continue
     }
 
     // Skip .END and other directives that don't generate code
-    if (line.match(/^\.(END|EXTERNAL|GLOBAL)/i)) continue
+    if (line.match(/^\.(END|EXTERNAL|GLOBAL)/i)) {
+      inSegment = false
+      continue
+    }
+
+    if (!inSegment) continue
 
     // Skip if it's just a label on its own line
     if (line.match(/^[a-zA-Z_][a-zA-Z0-9_]*\s*$/)) continue
@@ -241,9 +254,11 @@ export async function assemble(): Promise<boolean> {
   vm.reset()
   const osLoaded = await loadOSIntoVM()
   
-  // Load user program
-  const program = new Uint16Array(result.code)
-  vm.load(origin, program)
+  // Load all segments at their correct origins
+  for (const segment of result.segments) {
+    const program = new Uint16Array(segment.code)
+    vm.load(segment.origin, program)
+  }
 
   // Set up initial state like lc3tools does (skip running OS boot code)
   // This directly sets PC/PSR/R6 to user mode without executing OS_START
@@ -273,6 +288,14 @@ export async function assemble(): Promise<boolean> {
     }
   }
 
+  // Build message about loaded segments
+  const segmentInfo = result.segments
+    .map((seg) => `x${seg.origin.toString(16).toUpperCase()}`)
+    .join(', ')
+  const segmentMsg = result.segments.length > 1 
+    ? `Assembled successfully. Loaded ${result.segments.length} segments at: ${segmentInfo}\n`
+    : `Assembled successfully. Origin: ${segmentInfo}\n`
+
   lc3Store.setState((s) => ({
     ...s,
     origin,
@@ -288,7 +311,7 @@ export async function assemble(): Promise<boolean> {
     prevRegisters: [0, 0, 0, 0, 0, 0, 0, 0],
     changedRegisters: new Set(),
     conditionCode: vm!.cond_str(),
-    consoleOutput: s.consoleOutput + `Assembled successfully. Origin: x${origin.toString(16).toUpperCase()}\n`,
+    consoleOutput: s.consoleOutput + segmentMsg,
     pcToLine,
     lineToPC,
     symbolTable,
