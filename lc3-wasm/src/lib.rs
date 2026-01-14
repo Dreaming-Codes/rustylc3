@@ -309,6 +309,21 @@ pub struct AssemblyResult {
     pub error: Option<String>,
 }
 
+/// A single code segment with its origin address.
+#[derive(Serialize, Deserialize)]
+pub struct WasmSegment {
+    pub origin: u16,
+    pub code: Vec<u16>,
+}
+
+/// Assembly result with full segment information.
+#[derive(Serialize, Deserialize)]
+pub struct AssemblyResultWithSegments {
+    pub success: bool,
+    pub segments: Option<Vec<WasmSegment>>,
+    pub error: Option<String>,
+}
+
 /// Assemble LC-3 source code into machine code.
 ///
 /// Returns an object with:
@@ -338,22 +353,65 @@ pub fn assemble(source: &str) -> JsValue {
     serde_wasm_bindgen::to_value(&result).unwrap_or(JsValue::NULL)
 }
 
-/// Assemble LC-3 source code and return raw bytes suitable for loading.
+/// Assemble LC-3 source code with full segment support.
 ///
-/// Returns bytes in big-endian format with origin prefix, or throws on error.
+/// Returns an object with:
+/// - `success`: boolean indicating success
+/// - `segments`: array of segments, each with `origin` and `code` (if successful)
+/// - `error`: error message (if failed)
+///
+/// This function properly handles multiple `.ORIG` directives, loading each
+/// segment at its correct memory location.
 #[wasm_bindgen]
-pub fn assemble_to_bytes(source: &str, origin: u16) -> Result<Vec<u8>, JsError> {
+pub fn assemble_with_segments(source: &str) -> JsValue {
     let mut asm = Assembler::new();
 
-    let code = asm.assemble(source).map_err(|e| JsError::new(&e))?;
+    let result = match asm.assemble_segments(source) {
+        Ok(segments) => AssemblyResultWithSegments {
+            success: true,
+            segments: Some(
+                segments
+                    .into_iter()
+                    .map(|s| WasmSegment {
+                        origin: s.origin,
+                        code: s.code,
+                    })
+                    .collect(),
+            ),
+            error: None,
+        },
+        Err(e) => AssemblyResultWithSegments {
+            success: false,
+            segments: None,
+            error: Some(e.to_string()),
+        },
+    };
 
-    let mut bytes = Vec::with_capacity(2 + code.len() * 2);
-    bytes.extend_from_slice(&origin.to_be_bytes());
-    for word in code {
-        bytes.extend_from_slice(&word.to_be_bytes());
-    }
+    serde_wasm_bindgen::to_value(&result).unwrap_or(JsValue::NULL)
+}
 
-    Ok(bytes)
+/// Assemble LC-3 source code and return raw bytes in lc3tools format.
+///
+/// This format properly supports multiple `.ORIG` directives.
+/// Returns bytes suitable for `load_bytes()`, or throws on error.
+#[wasm_bindgen]
+pub fn assemble_to_bytes(source: &str) -> Result<Vec<u8>, JsError> {
+    let mut asm = Assembler::new();
+
+    let segments = asm
+        .assemble_segments(source)
+        .map_err(|e| JsError::new(&e.to_string()))?;
+
+    // Convert to lc3_assembler::Segment type
+    let assembler_segments: Vec<lc3_assembler::Segment> = segments
+        .into_iter()
+        .map(|s| lc3_assembler::Segment {
+            origin: s.origin,
+            code: s.code,
+        })
+        .collect();
+
+    Ok(lc3tools_format::encode(&assembler_segments))
 }
 
 /// Initialize the WASM module.
