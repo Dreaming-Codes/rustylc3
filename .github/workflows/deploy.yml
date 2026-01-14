@@ -20,6 +20,8 @@ jobs:
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@nightly
+        with:
+          toolchain: nightly-2026-01-10
 
       - name: Install wasm-pack
         uses: jetli/wasm-pack-action@v0.4.0
