@@ -557,3 +557,18 @@ export function shareFile(): string {
 export function markUnsaved() {
   fileManagerStore.setState((s) => ({ ...s, hasUnsavedChanges: true }))
 }
+
+/**
+ * Load example code from learning section
+ */
+export function loadExampleCode(code: string, filename: string) {
+  updateSourceCode(code, false)
+  fileManagerStore.setState((s) => ({
+    ...s,
+    currentFileId: null,
+    currentFileName: filename,
+    currentFileHandle: null,
+    currentFilePath: null,
+    hasUnsavedChanges: false,
+  }))
+}

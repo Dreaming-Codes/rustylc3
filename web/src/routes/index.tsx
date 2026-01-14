@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate } from '@tanstack/react-router'
+import { createFileRoute, useNavigate, Link } from '@tanstack/react-router'
 import { useEffect } from 'react'
 import { useStore } from '@tanstack/react-store'
 import {
@@ -6,7 +6,7 @@ import {
   Group as PanelGroup,
   Separator as PanelResizeHandle,
 } from 'react-resizable-panels'
-import { Cpu, Code2, Github, PanelLeftClose, PanelLeft } from 'lucide-react'
+import { Cpu, Code2, Github, PanelLeftClose, PanelLeft, BookOpen } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { LC3Editor } from '@/components/LC3Editor'
@@ -116,6 +116,17 @@ function IDE() {
           <AdvancedMenu />
         </div>
         <div className="flex items-center gap-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="gap-1.5 text-zinc-400 hover:text-zinc-100"
+            asChild
+          >
+            <Link to="/learn">
+              <BookOpen className="h-4 w-4" />
+              <span className="hidden sm:inline">Learn</span>
+            </Link>
+          </Button>
           <Button
             variant="ghost"
             size="sm"
