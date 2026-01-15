@@ -207,12 +207,12 @@ ROT13_DONE
 ; ------------------------------------------------------------
 ; DATA
 ; ------------------------------------------------------------
-MSG1        .STRINGZ "Example 1 - Echo (type, Enter to stop):\n"
-MSG2        .STRINGZ "Example 2 - Uppercase (type, Enter to stop):\n"
-MSG3        .STRINGZ "Example 3 - Counter (type, Enter to stop):\n"
-MSG4        .STRINGZ "Example 4 - ROT13 cipher (type, Enter to stop):\n"
+MSG1        .STRINGZ "Example 1 - Echo (type, Enter to stop):\\n"
+MSG2        .STRINGZ "Example 2 - Uppercase (type, Enter to stop):\\n"
+MSG3        .STRINGZ "Example 3 - Counter (type, Enter to stop):\\n"
+MSG4        .STRINGZ "Example 4 - ROT13 cipher (type, Enter to stop):\\n"
 COUNT_MSG   .STRINGZ "You typed "
-CHARS_MSG   .STRINGZ " characters.\n"
+CHARS_MSG   .STRINGZ " characters.\\n"
 
 NEWLINE         .FILL x0A
 NEG_NEWLINE     .FILL xFFF6     ; -10

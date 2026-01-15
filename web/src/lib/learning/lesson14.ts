@@ -222,11 +222,11 @@ PRINT_NUMBER
 ; ============================================================
 ; DATA
 ; ============================================================
-MSG_HEADER  .STRINGZ "=== Base+Offset Addressing ===\n\n"
-MSG_EX1     .STRINGZ "Example 1 - Direct offset access:\n"
-MSG_EX2     .STRINGZ "Example 2 - Loop iteration:\n"
-MSG_EX3     .STRINGZ "Example 3 - Store squares:\n"
-MSG_EX4     .STRINGZ "Example 4 - Array reversal:\n"
+MSG_HEADER  .STRINGZ "=== Base+Offset Addressing ===\\n\\n"
+MSG_EX1     .STRINGZ "Example 1 - Direct offset access:\\n"
+MSG_EX2     .STRINGZ "Example 2 - Loop iteration:\\n"
+MSG_EX3     .STRINGZ "Example 3 - Store squares:\\n"
+MSG_EX4     .STRINGZ "Example 4 - Array reversal:\\n"
 MSG_ORIG    .STRINGZ "Original: "
 MSG_REVERSED .STRINGZ "Reversed: "
 

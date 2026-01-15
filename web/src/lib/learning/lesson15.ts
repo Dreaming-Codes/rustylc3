@@ -201,19 +201,19 @@ PN_SKIP_TENS
 ; ============================================================
 ; DATA
 ; ============================================================
-MSG_HEADER  .STRINGZ "=== Indirect Addressing ===\n\n"
-MSG_EX1     .STRINGZ "Example 1 - LDI basics:\n"
-MSG_EX2     .STRINGZ "Example 2 - STI basics:\n"
-MSG_EX3     .STRINGZ "Example 3 - Changing pointers:\n"
+MSG_HEADER  .STRINGZ "=== Indirect Addressing ===\\n\\n"
+MSG_EX1     .STRINGZ "Example 1 - LDI basics:\\n"
+MSG_EX2     .STRINGZ "Example 2 - STI basics:\\n"
+MSG_EX3     .STRINGZ "Example 3 - Changing pointers:\\n"
 MSG_EX4     .STRINGZ "Example 4 - Linked list: "
 
-MSG_LD      .STRINGZ "LD loads the address (pointer)\n"
+MSG_LD      .STRINGZ "LD loads the address (pointer)\\n"
 MSG_LDI     .STRINGZ "LDI loads the VALUE at that address: "
 MSG_BEFORE  .STRINGZ "Before STI: "
 MSG_AFTER   .STRINGZ "After STI:  "
 MSG_CURRENT .STRINGZ "Via selector (Option A): "
 MSG_CHANGED .STRINGZ "Via selector (Option B): "
-MSG_END_LIST .STRINGZ " -> END\n"
+MSG_END_LIST .STRINGZ " -> END\\n"
 
 ; Pointer example data
 ACTUAL_DATA     .FILL #42

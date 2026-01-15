@@ -262,18 +262,18 @@ PN_SKIP
 ; ============================================================
 ; DATA
 ; ============================================================
-MSG_HEADER    .STRINGZ "=== The Stack ===\n\n"
-MSG_EX1       .STRINGZ "Example 1 - Push/Pop:\n"
-MSG_EX2       .STRINGZ "Example 2 - Nested subroutines:\n"
-MSG_EX3       .STRINGZ "Example 3 - Stack computation:\n"
+MSG_HEADER    .STRINGZ "=== The Stack ===\\n\\n"
+MSG_EX1       .STRINGZ "Example 1 - Push/Pop:\\n"
+MSG_EX2       .STRINGZ "Example 2 - Nested subroutines:\\n"
+MSG_EX3       .STRINGZ "Example 3 - Stack computation:\\n"
 
 MSG_PUSHED    .STRINGZ "Pushed: "
-MSG_POPPING   .STRINGZ "Popping (reverse order)...\n"
+MSG_POPPING   .STRINGZ "Popping (reverse order)...\\n"
 MSG_POPPED    .STRINGZ "Popped: "
-MSG_IN_OUTER  .STRINGZ "  -> In OUTER_SUB\n"
-MSG_IN_INNER  .STRINGZ "     -> In INNER_SUB\n"
-MSG_BACK_OUTER .STRINGZ "  <- Back in OUTER_SUB\n"
-MSG_RETURNED  .STRINGZ "<- Returned to main\n\n"
+MSG_IN_OUTER  .STRINGZ "  -> In OUTER_SUB\\n"
+MSG_IN_INNER  .STRINGZ "     -> In INNER_SUB\\n"
+MSG_BACK_OUTER .STRINGZ "  <- Back in OUTER_SUB\\n"
+MSG_RETURNED  .STRINGZ "<- Returned to main\\n\\n"
 MSG_CALC      .STRINGZ "(3 + 5) * 2 = "
 
 STACK_BASE    .FILL xFE00

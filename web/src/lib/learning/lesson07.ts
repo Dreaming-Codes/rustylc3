@@ -119,11 +119,11 @@ END_CHECK
 TEST_NUM    .FILL #0        ; Try changing this to test branching!
 CHECK_NUM   .FILL #-7       ; Try: positive, negative, and zero values
 
-MSG_NOT_ZERO .STRINGZ "Number is not zero!\n"
-MSG_ZERO     .STRINGZ "Number is zero!\n"
-MSG_NEG      .STRINGZ "Number is negative\n"
-MSG_ZERO2    .STRINGZ "Number is zero\n"
-MSG_POS      .STRINGZ "Number is positive\n"
+MSG_NOT_ZERO .STRINGZ "Number is not zero!\\n"
+MSG_ZERO     .STRINGZ "Number is zero!\\n"
+MSG_NEG      .STRINGZ "Number is negative\\n"
+MSG_ZERO2    .STRINGZ "Number is zero\\n"
+MSG_POS      .STRINGZ "Number is positive\\n"
 
         .END
 

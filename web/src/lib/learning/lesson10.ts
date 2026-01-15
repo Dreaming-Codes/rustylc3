@@ -151,8 +151,8 @@ PROMPT1     .STRINGZ "Type a character: "
 PROMPT2     .STRINGZ "Enter a digit (0-9): "
 RESULT_MSG  .STRINGZ "Doubled: "
 QUESTION    .STRINGZ "Do you like LC-3? (y/n): "
-MSG_YES     .STRINGZ "Great! LC-3 likes you too!\n"
-MSG_NO      .STRINGZ "That's okay, it grows on you!\n"
+MSG_YES     .STRINGZ "Great! LC-3 likes you too!\\n"
+MSG_NO      .STRINGZ "That's okay, it grows on you!\\n"
 
 NEWLINE     .FILL x0A
 ASCII_0     .FILL x30       ; '0'

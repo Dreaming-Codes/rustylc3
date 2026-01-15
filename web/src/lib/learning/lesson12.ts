@@ -168,10 +168,10 @@ PBM_LOOP
 ; ============================================================
 ; DATA
 ; ============================================================
-MSG_START   .STRINGZ "=== Subroutine Demo ===\n"
-MSG_END     .STRINGZ "=== Done! ===\n\n"
-MSG_BOX     .STRINGZ "A box made with subroutines:\n"
-GREETING_MSG .STRINGZ "Hello from a subroutine!\n\n"
+MSG_START   .STRINGZ "=== Subroutine Demo ===\\n"
+MSG_END     .STRINGZ "=== Done! ===\\n\\n"
+MSG_BOX     .STRINGZ "A box made with subroutines:\\n"
+GREETING_MSG .STRINGZ "Hello from a subroutine!\\n\\n"
 
 CHAR_STAR   .FILL x2A       ; '*'
 CHAR_PLUS   .FILL x2B       ; '+'

@@ -308,14 +308,14 @@ PN_S    LD R0, ASCII_0
 ; ============================================================
 ; DATA
 ; ============================================================
-MSG_HEADER     .STRINGZ "=== Saving Registers ===\n\n"
-MSG_EX1        .STRINGZ "Example 1 - BAD subroutine (clobbers regs):\n"
-MSG_EX2        .STRINGZ "Example 2 - GOOD subroutine (saves regs):\n"
-MSG_EX3        .STRINGZ "Example 3 - Safe Multiply:\n"
+MSG_HEADER     .STRINGZ "=== Saving Registers ===\\n\\n"
+MSG_EX1        .STRINGZ "Example 1 - BAD subroutine (clobbers regs):\\n"
+MSG_EX2        .STRINGZ "Example 2 - GOOD subroutine (saves regs):\\n"
+MSG_EX3        .STRINGZ "Example 3 - Safe Multiply:\\n"
 MSG_BEFORE     .STRINGZ "Before call: "
 MSG_AFTER_BAD  .STRINGZ "After BAD:   "
 MSG_AFTER_GOOD .STRINGZ "After GOOD:  "
-MSG_BEFORE_MULT .STRINGZ "6 * 7 = ?\n"
+MSG_BEFORE_MULT .STRINGZ "6 * 7 = ?\\n"
 MSG_RESULT     .STRINGZ "Result: "
 MSG_PRESERVED  .STRINGZ "Registers preserved: "
 MSG_R1         .STRINGZ "R1="

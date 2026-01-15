@@ -346,31 +346,31 @@ PN_S    LD R0, ASCII_0
 ; ============================================================
 ; DATA
 ; ============================================================
-MSG_HEADER      .STRINGZ "=== Lesson 18: Final Project ===\n\n"
-MSG_PART1       .STRINGZ "Part 1 - JMP (indirect jump):\n"
-MSG_PART2       .STRINGZ "Part 2 - JSRR (indirect call):\n"
-MSG_PART3       .STRINGZ "Part 3 - Jump table menu:\n"
-MSG_PART4       .STRINGZ "Part 4 - .BLKW buffer:\n"
-MSG_FINAL       .STRINGZ "=== FINAL PROJECT: Calculator ===\n"
+MSG_HEADER      .STRINGZ "=== Lesson 18: Final Project ===\\n\\n"
+MSG_PART1       .STRINGZ "Part 1 - JMP (indirect jump):\\n"
+MSG_PART2       .STRINGZ "Part 2 - JSRR (indirect call):\\n"
+MSG_PART3       .STRINGZ "Part 3 - Jump table menu:\\n"
+MSG_PART4       .STRINGZ "Part 4 - .BLKW buffer:\\n"
+MSG_FINAL       .STRINGZ "=== FINAL PROJECT: Calculator ===\\n"
 
-MSG_SKIPPED     .STRINGZ "This should NOT print!\n"
-MSG_JUMPED      .STRINGZ "Successfully jumped!\n"
-MSG_HELLO       .STRINGZ "Hello from FUNC_HELLO!\n"
-MSG_GOODBYE     .STRINGZ "Goodbye from FUNC_GOODBYE!\n"
+MSG_SKIPPED     .STRINGZ "This should NOT print!\\n"
+MSG_JUMPED      .STRINGZ "Successfully jumped!\\n"
+MSG_HELLO       .STRINGZ "Hello from FUNC_HELLO!\\n"
+MSG_GOODBYE     .STRINGZ "Goodbye from FUNC_GOODBYE!\\n"
 
 MSG_MENU        .STRINGZ "0=Info 1=Add 2=Mult 3=Exit: "
-MSG_OPT0        .STRINGZ "LC-3 Calculator v1.0\n"
-MSG_OPT1        .STRINGZ "Addition selected!\n"
-MSG_OPT2        .STRINGZ "Multiplication selected!\n"
-MSG_OPT3        .STRINGZ "Goodbye!\n"
-MSG_INVALID     .STRINGZ "Invalid choice!\n"
+MSG_OPT0        .STRINGZ "LC-3 Calculator v1.0\\n"
+MSG_OPT1        .STRINGZ "Addition selected!\\n"
+MSG_OPT2        .STRINGZ "Multiplication selected!\\n"
+MSG_OPT3        .STRINGZ "Goodbye!\\n"
+MSG_INVALID     .STRINGZ "Invalid choice!\\n"
 
 MSG_BUFFER      .STRINGZ "Buffer contents: "
 
 MSG_CALC_PROMPT .STRINGZ "Enter (digit op digit) or 'q' to quit: "
 MSG_EQUALS      .STRINGZ "= "
-MSG_UNK_OP      .STRINGZ "Unknown operator! Use + - *\n"
-MSG_BYE         .STRINGZ "\nThank you for using LC-3 Calculator!\n"
+MSG_UNK_OP      .STRINGZ "Unknown operator! Use + - *\\n"
+MSG_BYE         .STRINGZ "\\nThank you for using LC-3 Calculator!\\n"
 
 ; Jump table for menu
 JUMP_TABLE      .FILL MENU_OPT0

@@ -232,10 +232,10 @@ MAX_RETURN_A
 ; ============================================================
 ; DATA
 ; ============================================================
-MSG_HEADER  .STRINGZ "=== Parameter Passing Demo ===\n\n"
-MSG_EX1     .STRINGZ "Example 1 - Print N Times:\n"
-MSG_EX2     .STRINGZ "Example 2 - Multiply (6 * 7):\n"
-MSG_EX3     .STRINGZ "Example 3 - Maximum:\n"
+MSG_HEADER  .STRINGZ "=== Parameter Passing Demo ===\\n\\n"
+MSG_EX1     .STRINGZ "Example 1 - Print N Times:\\n"
+MSG_EX2     .STRINGZ "Example 2 - Multiply (6 * 7):\\n"
+MSG_EX3     .STRINGZ "Example 3 - Maximum:\\n"
 MSG_RESULT  .STRINGZ "Result: "
 MSG_MAX     .STRINGZ "Max is: "
 
