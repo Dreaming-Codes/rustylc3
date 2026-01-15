@@ -84,7 +84,7 @@ const lesson: LearningExample = {
 ; ------------------------------------------------------------
 ; PRINT_STARS: Print a line of 10 asterisks
 ; Input: None
-; Output: Prints "**********\n"
+; Output: Prints "**********" followed by newline
 ; Modifies: R0, R1
 ; ------------------------------------------------------------
 PRINT_STARS
