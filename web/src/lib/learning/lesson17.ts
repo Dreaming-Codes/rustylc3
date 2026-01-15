@@ -17,39 +17,56 @@ const lesson: LearningExample = {
 ; LESSON 17: Saving Registers (Callee-Save Convention)
 ; ============================================================
 ; When a subroutine uses registers, it might overwrite values
-; the caller was using! There are two solutions:
-;
-; CALLER-SAVE: Caller saves registers before call, restores after
-;   - Caller does more work
-;   - Only saves what it actually needs
+; the caller was using! The solution: save and restore registers.
 ;
 ; CALLEE-SAVE: Subroutine saves registers it uses, restores before RET
 ;   - Subroutine is "transparent" - doesn't affect caller's registers
-;   - More reliable, easier for caller
 ;   - Standard convention in LC-3
-;
-; In this lesson, we'll implement proper callee-save subroutines.
 ; ============================================================
 
         .ORIG x3000
+
+        BRnzp START         ; Skip over data section
+
+; ============================================================
+; CONSTANTS AND POINTERS
+; ============================================================
+STACK_BASE     .FILL xFE00
+ASCII_0        .FILL x30
+NEWLINE        .FILL x0A
+
+; String pointers
+PTR_MSG_HEADER  .FILL x4000
+PTR_MSG_EX1     .FILL x4030
+PTR_MSG_EX2     .FILL x4080
+PTR_MSG_EX3     .FILL x40D0
+PTR_MSG_BEFORE  .FILL x4100
+PTR_MSG_AFTER_B .FILL x4120
+PTR_MSG_AFTER_G .FILL x4140
+PTR_MSG_MULT    .FILL x4160
+PTR_MSG_RESULT  .FILL x4180
+PTR_MSG_PRES    .FILL x4190
+PTR_MSG_R1      .FILL x41B0
+PTR_MSG_R2      .FILL x41C0
+PTR_MSG_R3      .FILL x41D0
 
 ; ============================================================
 ; MAIN PROGRAM
 ; ============================================================
 
-        ; Initialize stack pointer
+START
         LD R6, STACK_BASE
 
-        LEA R0, MSG_HEADER
+        LD R0, PTR_MSG_HEADER
         PUTS
 
 ; ------------------------------------------------------------
 ; EXAMPLE 1: The Problem - Registers Getting Clobbered
 ; ------------------------------------------------------------
-        LEA R0, MSG_EX1
+        LD R0, PTR_MSG_EX1
         PUTS
         
-        ; Set up some values in registers
+        ; Set up values in registers
         AND R1, R1, #0
         ADD R1, R1, #10     ; R1 = 10
         AND R2, R2, #0
@@ -57,23 +74,23 @@ const lesson: LearningExample = {
         AND R3, R3, #0
         ADD R3, R3, #7      ; R3 = 7
         
-        LEA R0, MSG_BEFORE
+        LD R0, PTR_MSG_BEFORE
         PUTS
-        JSR PRINT_REGS      ; Print R1, R2, R3
+        JSR PRINT_REGS
         
-        ; Call a BAD subroutine that doesn't save registers
+        ; Call BAD subroutine that doesn't save registers
         JSR BAD_SUBROUTINE
         
-        LEA R0, MSG_AFTER_BAD
+        LD R0, PTR_MSG_AFTER_B
         PUTS
-        JSR PRINT_REGS      ; R1, R2, R3 were destroyed!
+        JSR PRINT_REGS      ; R1, R2, R3 destroyed!
         LD R0, NEWLINE
         OUT
 
 ; ------------------------------------------------------------
 ; EXAMPLE 2: The Solution - Proper Register Saving
 ; ------------------------------------------------------------
-        LEA R0, MSG_EX2
+        LD R0, PTR_MSG_EX2
         PUTS
         
         ; Set up values again
@@ -84,58 +101,54 @@ const lesson: LearningExample = {
         AND R3, R3, #0
         ADD R3, R3, #7
         
-        LEA R0, MSG_BEFORE
+        LD R0, PTR_MSG_BEFORE
         PUTS
         JSR PRINT_REGS
         
-        ; Call a GOOD subroutine that saves registers
+        ; Call GOOD subroutine that saves registers
         JSR GOOD_SUBROUTINE
         
-        LEA R0, MSG_AFTER_GOOD
+        LD R0, PTR_MSG_AFTER_G
         PUTS
         JSR PRINT_REGS      ; R1, R2, R3 preserved!
         LD R0, NEWLINE
         OUT
 
 ; ------------------------------------------------------------
-; EXAMPLE 3: Practical Example - Multiply with Proper Saving
+; EXAMPLE 3: Safe Multiply (6 * 7)
 ; ------------------------------------------------------------
-        LEA R0, MSG_EX3
+        LD R0, PTR_MSG_EX3
         PUTS
         
-        ; Calculate 6 * 7 using our safe multiply
         AND R1, R1, #0
-        ADD R1, R1, #6      ; First operand
+        ADD R1, R1, #6      ; A = 6
         AND R2, R2, #0
-        ADD R2, R2, #7      ; Second operand
+        ADD R2, R2, #7      ; B = 7
         
-        ; R3, R4 have important values we want to keep
+        ; Keep values in R3, R4 to verify preservation
         AND R3, R3, #0
         ADD R3, R3, #3
         AND R4, R4, #0
         ADD R4, R4, #4
         
-        LEA R0, MSG_BEFORE_MULT
+        LD R0, PTR_MSG_MULT
         PUTS
         
-        ; Input: R1 = A, R2 = B
-        ; Output: R0 = A * B
+        ; SAFE_MULTIPLY: R1*R2 -> R0
         JSR SAFE_MULTIPLY
         
-        ; Result is in R0
         ADD R5, R0, #0      ; Save result
         
-        LEA R0, MSG_RESULT
+        LD R0, PTR_MSG_RESULT
         PUTS
         ADD R2, R5, #0
         JSR PRINT_NUM
         LD R0, NEWLINE
         OUT
         
-        ; Verify R3 and R4 were preserved
-        LEA R0, MSG_PRESERVED
+        LD R0, PTR_MSG_PRES
         PUTS
-        JSR PRINT_REGS      ; Should show R1=6, R2=7, R3=3
+        JSR PRINT_REGS
         
         HALT
 
@@ -143,98 +156,75 @@ const lesson: LearningExample = {
 ; SUBROUTINES
 ; ============================================================
 
-; ------------------------------------------------------------
-; BAD_SUBROUTINE - Demonstrates register clobbering
-; Uses R1, R2, R3 without saving them
-; ------------------------------------------------------------
 BAD_SUBROUTINE
-        ; This subroutine carelessly overwrites registers!
-        AND R1, R1, #0
-        ADD R1, R1, #1      ; Overwrites R1!
-        AND R2, R2, #0
-        ADD R2, R2, #2      ; Overwrites R2!
-        AND R3, R3, #0
-        ADD R3, R3, #3      ; Overwrites R3!
-        RET
-
-; ------------------------------------------------------------
-; GOOD_SUBROUTINE - Properly saves and restores registers
-; Uses R1, R2, R3 but preserves caller's values
-; ------------------------------------------------------------
-GOOD_SUBROUTINE
-        ; === PROLOGUE: Save registers we'll use ===
-        ADD R6, R6, #-1
-        STR R7, R6, #0      ; Save return address
-        ADD R6, R6, #-1
-        STR R1, R6, #0      ; Save R1
-        ADD R6, R6, #-1
-        STR R2, R6, #0      ; Save R2
-        ADD R6, R6, #-1
-        STR R3, R6, #0      ; Save R3
-        
-        ; === BODY: Do our work (uses R1, R2, R3) ===
+        ; Carelessly overwrites registers!
         AND R1, R1, #0
         ADD R1, R1, #1
         AND R2, R2, #0
         ADD R2, R2, #2
         AND R3, R3, #0
         ADD R3, R3, #3
-        ; (In a real subroutine, we'd do useful work here)
-        
-        ; === EPILOGUE: Restore registers in reverse order ===
-        LDR R3, R6, #0      ; Restore R3
-        ADD R6, R6, #1
-        LDR R2, R6, #0      ; Restore R2
-        ADD R6, R6, #1
-        LDR R1, R6, #0      ; Restore R1
-        ADD R6, R6, #1
-        LDR R7, R6, #0      ; Restore return address
-        ADD R6, R6, #1
-        
         RET
 
-; ------------------------------------------------------------
-; SAFE_MULTIPLY - Multiply with proper register saving
-; Input: R1 = A, R2 = B
-; Output: R0 = A * B
-; Preserves: R1, R2, R3, R4 (and R7 for nesting)
-; ------------------------------------------------------------
-SAFE_MULTIPLY
-        ; === PROLOGUE ===
+GOOD_SUBROUTINE
+        ; === PROLOGUE: Save registers ===
         ADD R6, R6, #-1
-        STR R7, R6, #0      ; Save R7
+        STR R7, R6, #0
         ADD R6, R6, #-1
-        STR R3, R6, #0      ; Save R3 (we use it as counter)
+        STR R1, R6, #0
         ADD R6, R6, #-1
-        STR R4, R6, #0      ; Save R4 (we use it for temp)
+        STR R2, R6, #0
+        ADD R6, R6, #-1
+        STR R3, R6, #0
         
         ; === BODY ===
-        AND R0, R0, #0      ; R0 = 0 (accumulator/result)
-        ADD R3, R2, #0      ; R3 = B (counter, copy to preserve R2)
-        ADD R4, R1, #0      ; R4 = A (copy to preserve R1)
+        AND R1, R1, #0
+        ADD R1, R1, #1
+        AND R2, R2, #0
+        ADD R2, R2, #2
+        AND R3, R3, #0
+        ADD R3, R3, #3
         
-        ADD R3, R3, #0      ; Check if B is 0
+        ; === EPILOGUE: Restore in reverse ===
+        LDR R3, R6, #0
+        ADD R6, R6, #1
+        LDR R2, R6, #0
+        ADD R6, R6, #1
+        LDR R1, R6, #0
+        ADD R6, R6, #1
+        LDR R7, R6, #0
+        ADD R6, R6, #1
+        RET
+
+; SAFE_MULTIPLY: R0 = R1 * R2
+SAFE_MULTIPLY
+        ADD R6, R6, #-1
+        STR R7, R6, #0
+        ADD R6, R6, #-1
+        STR R3, R6, #0
+        ADD R6, R6, #-1
+        STR R4, R6, #0
+        
+        AND R0, R0, #0      ; result = 0
+        ADD R3, R2, #0      ; counter = B
+        ADD R4, R1, #0      ; temp = A
+        
+        ADD R3, R3, #0
         BRz SM_DONE
-        
 SM_LOOP
-        ADD R0, R0, R4      ; result += A
-        ADD R3, R3, #-1     ; counter--
+        ADD R0, R0, R4
+        ADD R3, R3, #-1
         BRp SM_LOOP
-        
 SM_DONE
-        ; === EPILOGUE ===
         LDR R4, R6, #0
         ADD R6, R6, #1
         LDR R3, R6, #0
         ADD R6, R6, #1
         LDR R7, R6, #0
         ADD R6, R6, #1
-        
-        RET                 ; R0 has the result
+        RET
 
-; ------------------------------------------------------------
-; PRINT_REGS - Print R1, R2, R3 values (helper)
-; ------------------------------------------------------------
+; PRINT_REGS: Print R1, R2, R3
 PRINT_REGS
         ADD R6, R6, #-1
         STR R7, R6, #0
@@ -245,19 +235,19 @@ PRINT_REGS
         ADD R6, R6, #-1
         STR R3, R6, #0
         
-        LEA R0, MSG_R1
+        LD R0, PTR_MSG_R1
         PUTS
-        LDR R2, R6, #2      ; Get saved R1
+        LDR R2, R6, #2
         JSR PRINT_NUM
         
-        LEA R0, MSG_R2
+        LD R0, PTR_MSG_R2
         PUTS
-        LDR R2, R6, #1      ; Get saved R2
+        LDR R2, R6, #1
         JSR PRINT_NUM
         
-        LEA R0, MSG_R3
+        LD R0, PTR_MSG_R3
         PUTS
-        LDR R2, R6, #0      ; Get saved R3
+        LDR R2, R6, #0
         JSR PRINT_NUM
         
         LD R0, NEWLINE
@@ -273,7 +263,7 @@ PRINT_REGS
         ADD R6, R6, #1
         RET
 
-; Print number in R2 (0-99)
+; PRINT_NUM: Print R2 as number (0-99)
 PRINT_NUM
         ADD R6, R6, #-1
         STR R7, R6, #0
@@ -306,66 +296,70 @@ PN_S    LD R0, ASCII_0
         RET
 
 ; ============================================================
-; DATA
+; DATA SEGMENT
 ; ============================================================
-MSG_HEADER     .STRINGZ "=== Saving Registers ===\\n\\n"
-MSG_EX1        .STRINGZ "Example 1 - BAD subroutine (clobbers regs):\\n"
-MSG_EX2        .STRINGZ "Example 2 - GOOD subroutine (saves regs):\\n"
-MSG_EX3        .STRINGZ "Example 3 - Safe Multiply:\\n"
-MSG_BEFORE     .STRINGZ "Before call: "
-MSG_AFTER_BAD  .STRINGZ "After BAD:   "
-MSG_AFTER_GOOD .STRINGZ "After GOOD:  "
-MSG_BEFORE_MULT .STRINGZ "6 * 7 = ?\\n"
-MSG_RESULT     .STRINGZ "Result: "
-MSG_PRESERVED  .STRINGZ "Registers preserved: "
-MSG_R1         .STRINGZ "R1="
-MSG_R2         .STRINGZ " R2="
-MSG_R3         .STRINGZ " R3="
 
-STACK_BASE     .FILL xFE00
-ASCII_0        .FILL x30
-NEWLINE        .FILL x0A
+        .ORIG x4000
+MSG_HEADER     .STRINGZ "=== Saving Registers ===\\n\\n"
+
+        .ORIG x4030
+MSG_EX1        .STRINGZ "Ex 1 - BAD sub (clobbers):\\n"
+
+        .ORIG x4080
+MSG_EX2        .STRINGZ "Ex 2 - GOOD sub (saves):\\n"
+
+        .ORIG x40D0
+MSG_EX3        .STRINGZ "Ex 3 - Safe Multiply:\\n"
+
+        .ORIG x4100
+MSG_BEFORE     .STRINGZ "Before: "
+
+        .ORIG x4120
+MSG_AFTER_BAD  .STRINGZ "After BAD: "
+
+        .ORIG x4140
+MSG_AFTER_GOOD .STRINGZ "After GOOD: "
+
+        .ORIG x4160
+MSG_MULT       .STRINGZ "6 * 7 = ?\\n"
+
+        .ORIG x4180
+MSG_RESULT     .STRINGZ "Result: "
+
+        .ORIG x4190
+MSG_PRESERVED  .STRINGZ "Preserved: "
+
+        .ORIG x41B0
+MSG_R1         .STRINGZ "R1="
+
+        .ORIG x41C0
+MSG_R2         .STRINGZ " R2="
+
+        .ORIG x41D0
+MSG_R3         .STRINGZ " R3="
 
         .END
 
 ; ============================================================
-; KEY CONCEPTS - SUBROUTINE TEMPLATE
+; SUBROUTINE TEMPLATE
 ; ============================================================
 ;
 ; SUBROUTINE_NAME
 ;     ; === PROLOGUE ===
-;     ADD R6, R6, #-1     ; \
-;     STR R7, R6, #0      ;  > Save R7 (for nested calls)
-;     ADD R6, R6, #-1     ; \
-;     STR Rx, R6, #0      ;  > Save each register you use
-;     ...                 ; /
+;     ADD R6, R6, #-1
+;     STR R7, R6, #0      ; Save R7 first
+;     ADD R6, R6, #-1
+;     STR Rx, R6, #0      ; Save registers you use
 ;     
 ;     ; === BODY ===
-;     (your code here)
+;     (your code)
 ;     
 ;     ; === EPILOGUE ===
-;     LDR Rx, R6, #0      ; \
-;     ADD R6, R6, #1      ;  > Restore in REVERSE order
-;     ...                 ; /
-;     LDR R7, R6, #0      ; \
-;     ADD R6, R6, #1      ;  > Restore R7 last
+;     LDR Rx, R6, #0      ; Restore in REVERSE order
+;     ADD R6, R6, #1
+;     LDR R7, R6, #0      ; Restore R7 last
+;     ADD R6, R6, #1
 ;     RET
-;
-; RULES:
-; 1. Save R7 FIRST if you call other subroutines
-; 2. Save all registers you modify (except return value register)
-; 3. Restore in REVERSE order of saving
-; 4. Restore R7 LAST, right before RET
-;
-; WHAT TO SAVE:
-; - R7: Always, if calling other subroutines
-; - R0: Usually holds return value, often not saved
-; - R1-R5: Save any you modify
-; - R6: NEVER save R6 (it's the stack pointer!)
-;
-; PRACTICE:
-; - Convert your subroutines from previous lessons to use this pattern
-; - Write a recursive function (e.g., factorial) with proper saving
 ; ============================================================
 `,
 };

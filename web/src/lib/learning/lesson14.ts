@@ -34,22 +34,47 @@ const lesson: LearningExample = {
 
         .ORIG x3000
 
+        BRnzp START         ; Skip over data section
+
+; ============================================================
+; POINTERS TO DATA SEGMENT
+; ============================================================
+PTR_NUMBERS     .FILL x4000     ; Array of 5 numbers
+PTR_RESULTS     .FILL x4010     ; Space for results
+PTR_REV_ARRAY   .FILL x4020     ; Array to reverse
+PTR_MSG_HEADER  .FILL x4100
+PTR_MSG_EX1     .FILL x4130
+PTR_MSG_EX2     .FILL x4160
+PTR_MSG_EX3     .FILL x4190
+PTR_MSG_EX4     .FILL x41C0
+PTR_MSG_ORIG    .FILL x41F0
+PTR_MSG_REV     .FILL x4200
+
+; Constants (close to code)
+ARRAY_SIZE  .FILL #5
+REV_SIZE    .FILL #5
+NEG_FIVE    .FILL #-5
+ASCII_0     .FILL x30
+SPACE       .FILL x20
+NEWLINE     .FILL x0A
+
 ; ============================================================
 ; MAIN PROGRAM
 ; ============================================================
 
-        LEA R0, MSG_HEADER
+START   
+        LD R0, PTR_MSG_HEADER
         PUTS
 
 ; ------------------------------------------------------------
-; EXAMPLE 1: Access Array Elements
+; EXAMPLE 1: Access Array Elements with Fixed Offsets
 ; ------------------------------------------------------------
 ; We have an array of 5 numbers. Let's access them using LDR.
 
-        LEA R0, MSG_EX1
+        LD R0, PTR_MSG_EX1
         PUTS
 
-        LEA R1, NUMBERS     ; R1 = base address of array
+        LD R1, PTR_NUMBERS  ; R1 = base address of array
         
         ; Access NUMBERS[0] - offset 0
         LDR R2, R1, #0      ; R2 = mem[R1 + 0] = first element
@@ -79,10 +104,10 @@ const lesson: LearningExample = {
 ; ------------------------------------------------------------
 ; Use the base register as a moving pointer through the array.
 
-        LEA R0, MSG_EX2
+        LD R0, PTR_MSG_EX2
         PUTS
         
-        LEA R1, NUMBERS     ; R1 = pointer to current element
+        LD R1, PTR_NUMBERS  ; R1 = pointer to current element
         LD R3, ARRAY_SIZE   ; R3 = 5 (counter)
 
 ITER_LOOP
@@ -101,20 +126,16 @@ ITER_LOOP
 ; ------------------------------------------------------------
 ; Let's fill an array with squares: 1, 4, 9, 16, 25
 
-        LEA R0, MSG_EX3
+        LD R0, PTR_MSG_EX3
         PUTS
         
-        LEA R1, RESULTS     ; R1 = base of results array
+        LD R1, PTR_RESULTS  ; R1 = base of results array
         AND R2, R2, #0
         ADD R2, R2, #1      ; R2 = current number (1, 2, 3, 4, 5)
-        AND R4, R4, #0      ; R4 = offset (0, 1, 2, 3, 4)
+        AND R4, R4, #0      ; R4 = offset counter
 
 SQUARE_LOOP
-        ; Calculate square (R2 * R2) using multiply subroutine
-        ADD R0, R2, #0      ; R0 = R2
-        ADD R5, R2, #0      ; R5 = R2 (save R2)
-        
-        ; Simple multiply: R0 = R2 * R2
+        ; Calculate square: R3 = R2 * R2
         AND R3, R3, #0      ; R3 = accumulator
         ADD R6, R2, #0      ; R6 = counter = R2
 SQ_MULT
@@ -127,12 +148,13 @@ SQ_MULT
         STR R3, R1, #0      ; mem[R1 + 0] = R3
         
         ; Print the result
+        ADD R5, R2, #0      ; Save R2
         ADD R2, R3, #0      ; R2 = square for printing
         JSR PRINT_NUMBER
         
         ; Move to next
         ADD R1, R1, #1      ; Next position in results
-        ADD R2, R5, #1      ; Next number (restore and increment)
+        ADD R2, R5, #1      ; Next number (R2 = old R2 + 1)
         ADD R4, R4, #1      ; Increment offset tracker
         
         LD R6, NEG_FIVE
@@ -147,13 +169,13 @@ SQ_MULT
 ; ------------------------------------------------------------
 ; Reverse an array in place using LDR and STR.
 
-        LEA R0, MSG_EX4
+        LD R0, PTR_MSG_EX4
         PUTS
         
-        ; Print original
-        LEA R0, MSG_ORIG
+        ; Print original array
+        LD R0, PTR_MSG_ORIG
         PUTS
-        LEA R1, REV_ARRAY
+        LD R1, PTR_REV_ARRAY
         LD R3, REV_SIZE
 PRINT_ORIG
         LDR R2, R1, #0
@@ -165,14 +187,14 @@ PRINT_ORIG
         OUT
         
         ; Reverse: swap elements from both ends
-        LEA R1, REV_ARRAY   ; R1 = left pointer (start)
-        LEA R2, REV_ARRAY
+        LD R1, PTR_REV_ARRAY    ; R1 = left pointer (start)
+        LD R2, PTR_REV_ARRAY
         LD R3, REV_SIZE
-        ADD R3, R3, #-1     ; R3 = size - 1
-        ADD R2, R2, R3      ; R2 = right pointer (end)
+        ADD R3, R3, #-1         ; R3 = size - 1
+        ADD R2, R2, R3          ; R2 = right pointer (end)
 
 REV_LOOP
-        ; Check if pointers crossed
+        ; Check if pointers crossed (R1 >= R2 means done)
         NOT R3, R2
         ADD R3, R3, #1
         ADD R3, R1, R3      ; R3 = R1 - R2
@@ -184,16 +206,16 @@ REV_LOOP
         STR R4, R1, #0      ; *left = R4
         STR R3, R2, #0      ; *right = R3 (temp)
         
-        ; Move pointers
+        ; Move pointers toward center
         ADD R1, R1, #1      ; left++
         ADD R2, R2, #-1     ; right--
         BRnzp REV_LOOP
 
 REV_DONE
-        ; Print reversed
-        LEA R0, MSG_REVERSED
+        ; Print reversed array
+        LD R0, PTR_MSG_REV
         PUTS
-        LEA R1, REV_ARRAY
+        LD R1, PTR_REV_ARRAY
         LD R3, REV_SIZE
 PRINT_REV
         LDR R2, R1, #0
@@ -210,47 +232,93 @@ PRINT_REV
 ; SUBROUTINES
 ; ============================================================
 
-; Print number in R2 (assumes 0-9)
+; Print number in R2 (0-99)
 PRINT_NUMBER
+        ST R7, PN_SAVE_R7
+        ST R3, PN_SAVE_R3
+        ST R4, PN_SAVE_R4
+        
+        AND R3, R3, #0      ; R3 = tens digit counter
+PN_TENS
+        ADD R4, R2, #-10
+        BRn PN_PRINT
+        ADD R2, R4, #0      ; R2 -= 10
+        ADD R3, R3, #1      ; tens++
+        BRnzp PN_TENS
+        
+PN_PRINT
+        ; Print tens if non-zero
+        ADD R3, R3, #0
+        BRz PN_ONES
+        LD R0, ASCII_0
+        ADD R0, R3, R0
+        OUT
+        
+PN_ONES
         LD R0, ASCII_0
         ADD R0, R2, R0
         OUT
         LD R0, SPACE
         OUT
+        
+        LD R4, PN_SAVE_R4
+        LD R3, PN_SAVE_R3
+        LD R7, PN_SAVE_R7
         RET
 
+PN_SAVE_R7  .BLKW 1
+PN_SAVE_R3  .BLKW 1
+PN_SAVE_R4  .BLKW 1
+
 ; ============================================================
-; DATA
+; DATA SEGMENT
 ; ============================================================
+
+        .ORIG x4000
+
+; Arrays at x4000
+NUMBERS     .FILL #1        ; x4000
+            .FILL #2        ; x4001
+            .FILL #3        ; x4002
+            .FILL #4        ; x4003
+            .FILL #5        ; x4004
+
+        .BLKW 11            ; Padding to x4010
+
+RESULTS     .BLKW #5        ; x4010-x4014: Space for squares
+
+        .BLKW 11            ; Padding to x4020
+
+REV_ARRAY   .FILL #1        ; x4020: Array to reverse
+            .FILL #2
+            .FILL #3
+            .FILL #4
+            .FILL #5
+
+; ============================================================
+; STRING SEGMENT
+; ============================================================
+
+        .ORIG x4100
 MSG_HEADER  .STRINGZ "=== Base+Offset Addressing ===\\n\\n"
-MSG_EX1     .STRINGZ "Example 1 - Direct offset access:\\n"
-MSG_EX2     .STRINGZ "Example 2 - Loop iteration:\\n"
-MSG_EX3     .STRINGZ "Example 3 - Store squares:\\n"
-MSG_EX4     .STRINGZ "Example 4 - Array reversal:\\n"
+
+        .ORIG x4130
+MSG_EX1     .STRINGZ "Ex 1 - Fixed offsets: "
+
+        .ORIG x4160
+MSG_EX2     .STRINGZ "Ex 2 - Loop iteration: "
+
+        .ORIG x4190
+MSG_EX3     .STRINGZ "Ex 3 - Store squares: "
+
+        .ORIG x41C0
+MSG_EX4     .STRINGZ "Ex 4 - Array reversal:\\n"
+
+        .ORIG x41F0
 MSG_ORIG    .STRINGZ "Original: "
-MSG_REVERSED .STRINGZ "Reversed: "
 
-NUMBERS     .FILL #1        ; Array of 5 numbers
-            .FILL #2
-            .FILL #3
-            .FILL #4
-            .FILL #5
-
-RESULTS     .BLKW #5        ; Space for 5 results
-
-REV_ARRAY   .FILL #1        ; Array to reverse
-            .FILL #2
-            .FILL #3
-            .FILL #4
-            .FILL #5
-            
-ARRAY_SIZE  .FILL #5
-REV_SIZE    .FILL #5
-NEG_FIVE    .FILL #-5
-
-ASCII_0     .FILL x30
-SPACE       .FILL x20
-NEWLINE     .FILL x0A
+        .ORIG x4200
+MSG_REV     .STRINGZ "Reversed: "
 
         .END
 
@@ -269,11 +337,11 @@ NEWLINE     .FILL x0A
 ; 3. ARRAY ACCESS PATTERNS:
 ;    
 ;    Fixed offset (random access):
-;        LEA R1, ARRAY
+;        LD R1, ARRAY_PTR  ; R1 = address of array
 ;        LDR R0, R1, #3    ; Load ARRAY[3]
 ;    
 ;    Moving pointer (sequential):
-;        LEA R1, ARRAY     ; R1 = pointer
+;        LD R1, ARRAY_PTR  ; R1 = pointer
 ;    LOOP:
 ;        LDR R0, R1, #0    ; Load *pointer
 ;        ADD R1, R1, #1    ; pointer++

@@ -26,105 +26,117 @@ const lesson: LearningExample = {
 ; Operations:
 ;   PUSH: Decrement SP, then store value at SP
 ;   POP:  Load value from SP, then increment SP
-;
-; The stack is ESSENTIAL for:
-;   - Saving/restoring registers in subroutines
-;   - Nested subroutine calls (saving R7)
-;   - Local variables
-;   - Expression evaluation
 ; ============================================================
 
         .ORIG x3000
+
+        BRnzp START         ; Skip over data section
+
+; ============================================================
+; CONSTANTS (must be near code that uses them)
+; ============================================================
+STACK_BASE    .FILL xFE00
+ASCII_0       .FILL x30
+NEWLINE       .FILL x0A
+
+; String pointers
+PTR_MSG_HEADER  .FILL x4000
+PTR_MSG_EX1     .FILL x4030
+PTR_MSG_EX2     .FILL x4060
+PTR_MSG_EX3     .FILL x4090
+PTR_MSG_PUSHED  .FILL x40C0
+PTR_MSG_POPPING .FILL x40D0
+PTR_MSG_POPPED  .FILL x4100
+PTR_MSG_OUTER   .FILL x4110
+PTR_MSG_INNER   .FILL x4130
+PTR_MSG_BACK    .FILL x4160
+PTR_MSG_RET     .FILL x4190
+PTR_MSG_CALC    .FILL x41C0
 
 ; ============================================================
 ; MAIN PROGRAM
 ; ============================================================
 
-        ; Initialize stack pointer
-        ; Stack grows down from xFE00 (below I/O region)
-        LD R6, STACK_BASE   ; R6 = xFE00 (stack pointer)
+START
+        ; Initialize stack pointer to xFE00
+        LD R6, STACK_BASE
 
-        LEA R0, MSG_HEADER
+        LD R0, PTR_MSG_HEADER
         PUTS
 
 ; ------------------------------------------------------------
 ; EXAMPLE 1: Basic PUSH and POP
 ; ------------------------------------------------------------
-        LEA R0, MSG_EX1
+        LD R0, PTR_MSG_EX1
         PUTS
 
-        ; Let's push some values onto the stack
+        ; Push 5 onto stack
         AND R1, R1, #0
-        ADD R1, R1, #5      ; R1 = 5
-        
-        ; PUSH R1 onto stack
+        ADD R1, R1, #5
         ADD R6, R6, #-1     ; SP-- (make room)
         STR R1, R6, #0      ; mem[SP] = R1
         
-        LEA R0, MSG_PUSHED
+        LD R0, PTR_MSG_PUSHED
         PUTS
         ADD R2, R1, #0
         JSR PRINT_NUM
         LD R0, NEWLINE
         OUT
 
-        ; Push another value
+        ; Push 9
         AND R1, R1, #0
-        ADD R1, R1, #9      ; R1 = 9
-        ADD R6, R6, #-1     ; PUSH
+        ADD R1, R1, #9
+        ADD R6, R6, #-1
         STR R1, R6, #0
         
-        LEA R0, MSG_PUSHED
+        LD R0, PTR_MSG_PUSHED
         PUTS
         ADD R2, R1, #0
         JSR PRINT_NUM
         LD R0, NEWLINE
         OUT
 
-        ; Push a third value
+        ; Push 3
         AND R1, R1, #0
-        ADD R1, R1, #3      ; R1 = 3
-        ADD R6, R6, #-1     ; PUSH
+        ADD R1, R1, #3
+        ADD R6, R6, #-1
         STR R1, R6, #0
         
-        LEA R0, MSG_PUSHED
+        LD R0, PTR_MSG_PUSHED
         PUTS
         ADD R2, R1, #0
         JSR PRINT_NUM
         LD R0, NEWLINE
         OUT
         
-        ; Now POP them off (LIFO - reverse order!)
-        LEA R0, MSG_POPPING
+        ; Pop them (LIFO - reverse order!)
+        LD R0, PTR_MSG_POPPING
         PUTS
         
-        ; POP into R2
-        LDR R2, R6, #0      ; R2 = mem[SP]
-        ADD R6, R6, #1      ; SP++
-        
-        LEA R0, MSG_POPPED
+        ; POP into R2 (should be 3)
+        LDR R2, R6, #0
+        ADD R6, R6, #1
+        LD R0, PTR_MSG_POPPED
         PUTS
-        JSR PRINT_NUM       ; Should print 3
+        JSR PRINT_NUM
         LD R0, NEWLINE
         OUT
 
-        ; POP again
+        ; POP (should be 9)
         LDR R2, R6, #0
         ADD R6, R6, #1
-        
-        LEA R0, MSG_POPPED
+        LD R0, PTR_MSG_POPPED
         PUTS
-        JSR PRINT_NUM       ; Should print 9
+        JSR PRINT_NUM
         LD R0, NEWLINE
         OUT
 
-        ; POP last one
+        ; POP (should be 5)
         LDR R2, R6, #0
         ADD R6, R6, #1
-        
-        LEA R0, MSG_POPPED
+        LD R0, PTR_MSG_POPPED
         PUTS
-        JSR PRINT_NUM       ; Should print 5
+        JSR PRINT_NUM
         LD R0, NEWLINE
         OUT
         LD R0, NEWLINE
@@ -133,24 +145,20 @@ const lesson: LearningExample = {
 ; ------------------------------------------------------------
 ; EXAMPLE 2: Saving R7 for Nested Calls
 ; ------------------------------------------------------------
-; This is the MAIN reason we need a stack in practice!
-; When subroutine A calls subroutine B, B's JSR overwrites R7.
-; We must PUSH R7 before calling, POP after returning.
-
-        LEA R0, MSG_EX2
+        LD R0, PTR_MSG_EX2
         PUTS
         
-        JSR OUTER_SUB       ; Call a subroutine that calls another
+        JSR OUTER_SUB
         
-        LEA R0, MSG_RETURNED
+        LD R0, PTR_MSG_RET
         PUTS
+        LD R0, NEWLINE
+        OUT
 
 ; ------------------------------------------------------------
-; EXAMPLE 3: Using Stack for Computation
+; EXAMPLE 3: Stack-based Computation: (3 + 5) * 2
 ; ------------------------------------------------------------
-; Calculate (3 + 5) * 2 using the stack.
-
-        LEA R0, MSG_EX3
+        LD R0, PTR_MSG_EX3
         PUTS
         
         ; Push 3
@@ -165,14 +173,14 @@ const lesson: LearningExample = {
         ADD R6, R6, #-1
         STR R1, R6, #0
         
-        ; Pop two values, add them, push result
+        ; Pop two, add, push result
         LDR R1, R6, #0      ; Pop 5
         ADD R6, R6, #1
         LDR R2, R6, #0      ; Pop 3
         ADD R6, R6, #1
-        ADD R1, R1, R2      ; 5 + 3 = 8
-        ADD R6, R6, #-1     ; Push 8
-        STR R1, R6, #0
+        ADD R1, R1, R2      ; 8
+        ADD R6, R6, #-1
+        STR R1, R6, #0      ; Push 8
         
         ; Push 2
         AND R1, R1, #0
@@ -180,30 +188,30 @@ const lesson: LearningExample = {
         ADD R6, R6, #-1
         STR R1, R6, #0
         
-        ; Pop two values, multiply, push result
+        ; Pop two, multiply, push result
         LDR R1, R6, #0      ; Pop 2
         ADD R6, R6, #1
         LDR R2, R6, #0      ; Pop 8
         ADD R6, R6, #1
         
-        ; Multiply R2 * R1 (simple loop)
-        AND R3, R3, #0      ; accumulator
+        ; R2 * R1 = 8 * 2
+        AND R3, R3, #0
 MULT_LOOP
-        ADD R3, R3, R2      ; acc += 8
+        ADD R3, R3, R2
         ADD R1, R1, #-1
         BRp MULT_LOOP
-        ; R3 = 8 * 2 = 16
+        ; R3 = 16
         
-        ADD R6, R6, #-1     ; Push result
-        STR R3, R6, #0
+        ADD R6, R6, #-1
+        STR R3, R6, #0      ; Push 16
         
-        ; Pop and display final result
+        ; Pop and display
         LDR R2, R6, #0
         ADD R6, R6, #1
         
-        LEA R0, MSG_CALC
+        LD R0, PTR_MSG_CALC
         PUTS
-        JSR PRINT_NUM       ; Should print 16
+        JSR PRINT_NUM
         LD R0, NEWLINE
         OUT
 
@@ -213,33 +221,42 @@ MULT_LOOP
 ; SUBROUTINES
 ; ============================================================
 
-; OUTER_SUB - Calls INNER_SUB, demonstrating R7 save/restore
 OUTER_SUB
-        ; SAVE R7 on stack (critical!)
+        ; SAVE R7 on stack
         ADD R6, R6, #-1
         STR R7, R6, #0
         
-        LEA R0, MSG_IN_OUTER
+        LD R0, PTR_MSG_OUTER
         PUTS
         
-        JSR INNER_SUB       ; This would destroy R7 without saving!
+        JSR INNER_SUB
         
-        LEA R0, MSG_BACK_OUTER
+        LD R0, PTR_MSG_BACK
         PUTS
         
-        ; RESTORE R7 from stack
+        ; RESTORE R7
         LDR R7, R6, #0
         ADD R6, R6, #1
-        
-        RET                 ; Now RET works correctly!
+        RET
 
 INNER_SUB
-        LEA R0, MSG_IN_INNER
+        ADD R6, R6, #-1
+        STR R7, R6, #0
+        LD R0, PTR_MSG_INNER
         PUTS
+        LDR R7, R6, #0
+        ADD R6, R6, #1
         RET
 
 ; Print number in R2 (0-99)
 PRINT_NUM
+        ADD R6, R6, #-1
+        STR R7, R6, #0
+        ADD R6, R6, #-1
+        STR R3, R6, #0
+        ADD R6, R6, #-1
+        STR R4, R6, #0
+        
         AND R3, R3, #0
 PN_TENS
         ADD R4, R2, #-10
@@ -257,28 +274,54 @@ PN_SKIP
         LD R0, ASCII_0
         ADD R0, R2, R0
         OUT
+        
+        LDR R4, R6, #0
+        ADD R6, R6, #1
+        LDR R3, R6, #0
+        ADD R6, R6, #1
+        LDR R7, R6, #0
+        ADD R6, R6, #1
         RET
 
 ; ============================================================
-; DATA
+; DATA SEGMENT
 ; ============================================================
+
+        .ORIG x4000
 MSG_HEADER    .STRINGZ "=== The Stack ===\\n\\n"
+
+        .ORIG x4030
 MSG_EX1       .STRINGZ "Example 1 - Push/Pop:\\n"
-MSG_EX2       .STRINGZ "Example 2 - Nested subroutines:\\n"
-MSG_EX3       .STRINGZ "Example 3 - Stack computation:\\n"
 
+        .ORIG x4060
+MSG_EX2       .STRINGZ "Example 2 - Nested calls:\\n"
+
+        .ORIG x4090
+MSG_EX3       .STRINGZ "Example 3 - Computation:\\n"
+
+        .ORIG x40C0
 MSG_PUSHED    .STRINGZ "Pushed: "
-MSG_POPPING   .STRINGZ "Popping (reverse order)...\\n"
-MSG_POPPED    .STRINGZ "Popped: "
-MSG_IN_OUTER  .STRINGZ "  -> In OUTER_SUB\\n"
-MSG_IN_INNER  .STRINGZ "     -> In INNER_SUB\\n"
-MSG_BACK_OUTER .STRINGZ "  <- Back in OUTER_SUB\\n"
-MSG_RETURNED  .STRINGZ "<- Returned to main\\n\\n"
-MSG_CALC      .STRINGZ "(3 + 5) * 2 = "
 
-STACK_BASE    .FILL xFE00
-ASCII_0       .FILL x30
-NEWLINE       .FILL x0A
+        .ORIG x40D0
+MSG_POPPING   .STRINGZ "Popping (reverse)...\\n"
+
+        .ORIG x4100
+MSG_POPPED    .STRINGZ "Popped: "
+
+        .ORIG x4110
+MSG_OUTER     .STRINGZ "  -> In OUTER_SUB\\n"
+
+        .ORIG x4130
+MSG_INNER     .STRINGZ "     -> In INNER_SUB\\n"
+
+        .ORIG x4160
+MSG_BACK      .STRINGZ "  <- Back in OUTER\\n"
+
+        .ORIG x4190
+MSG_RET       .STRINGZ "<- Returned to main\\n"
+
+        .ORIG x41C0
+MSG_CALC      .STRINGZ "(3+5)*2 = "
 
         .END
 
@@ -305,23 +348,10 @@ NEWLINE       .FILL x0A
 ;    Before RET: pop R7
 ;    This enables nested/recursive calls!
 ;
-; 6. PUSH/POP PATTERN:
-;        ; Push multiple
-;        ADD R6, R6, #-1
-;        STR R1, R6, #0
-;        ADD R6, R6, #-1
-;        STR R2, R6, #0
-;        
-;        ; Pop in REVERSE order
-;        LDR R2, R6, #0
-;        ADD R6, R6, #1
-;        LDR R1, R6, #0
-;        ADD R6, R6, #1
-;
 ; PRACTICE:
-; - Implement a recursive factorial function using the stack
+; - Implement recursive factorial using the stack
 ; - Create a reverse-string function using push/pop
-; - What happens if you pop more than you pushed? (stack underflow)
+; - What happens if you pop more than you pushed?
 ; ============================================================
 `,
 };

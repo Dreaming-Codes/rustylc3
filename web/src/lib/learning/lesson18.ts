@@ -23,42 +23,78 @@ const lesson: LearningExample = {
 ;   JSRR BaseR    - Jump to subroutine at address in BaseR
 ;   JMP BaseR     - Jump to address in BaseR (RET = JMP R7)
 ;   .BLKW n       - Allocate n words of memory (uninitialized)
-;
-; JSRR and JMP are useful for:
-;   - Function pointers / callbacks
-;   - Jump tables for switch statements
-;   - Dynamic dispatch
 ; ============================================================
 
         .ORIG x3000
+
+        BRnzp START         ; Skip over data section
+
+; ============================================================
+; CONSTANTS AND POINTERS
+; ============================================================
+STACK_BASE      .FILL xFE00
+NEG_ASCII_0     .FILL xFFD0     ; -48
+ASCII_0         .FILL x30
+NEWLINE         .FILL x0A
+SPACE           .FILL x20
+CHAR_PLUS       .FILL x2B       ; '+'
+CHAR_MINUS      .FILL x2D       ; '-'
+CHAR_STAR       .FILL x2A       ; '*'
+CHAR_Q          .FILL x71       ; 'q'
+BUFFER_SIZE     .FILL #5
+
+; String pointers
+PTR_MSG_HEADER  .FILL x4000
+PTR_MSG_PART1   .FILL x4040
+PTR_MSG_PART2   .FILL x4070
+PTR_MSG_PART3   .FILL x40A0
+PTR_MSG_PART4   .FILL x40D0
+PTR_MSG_FINAL   .FILL x4100
+PTR_MSG_JUMPED  .FILL x4140
+PTR_MSG_HELLO   .FILL x4160
+PTR_MSG_GOODBYE .FILL x4190
+PTR_MSG_MENU    .FILL x41C0
+PTR_MSG_OPT0    .FILL x41F0
+PTR_MSG_OPT1    .FILL x4210
+PTR_MSG_OPT2    .FILL x4230
+PTR_MSG_OPT3    .FILL x4250
+PTR_MSG_INVALID .FILL x4270
+PTR_MSG_BUFFER  .FILL x4290
+PTR_MSG_PROMPT  .FILL x42B0
+PTR_MSG_EQUALS  .FILL x42F0
+PTR_MSG_UNKOP   .FILL x4300
+PTR_MSG_BYE     .FILL x4330
+
+; Jump table for menu
+JUMP_TABLE      .FILL MENU_OPT0
+                .FILL MENU_OPT1
+                .FILL MENU_OPT2
+                .FILL MENU_OPT3
+
+; Buffer allocated with .BLKW
+BUFFER          .BLKW #5
 
 ; ============================================================
 ; MAIN PROGRAM
 ; ============================================================
 
-        LD R6, STACK_BASE   ; Initialize stack
+START
+        LD R6, STACK_BASE
 
-        LEA R0, MSG_HEADER
+        LD R0, PTR_MSG_HEADER
         PUTS
 
 ; ------------------------------------------------------------
 ; PART 1: JMP - Indirect Jump
 ; ------------------------------------------------------------
-; JMP BaseR jumps to the address stored in BaseR.
-; Note: RET is actually just JMP R7!
-
-        LEA R0, MSG_PART1
+        LD R0, PTR_MSG_PART1
         PUTS
 
-        LEA R1, JUMP_TARGET ; R1 = address of JUMP_TARGET
+        LEA R1, JUMP_TARGET
         JMP R1              ; Jump to address in R1
-        
-        ; This line is SKIPPED because we jumped!
-        LEA R0, MSG_SKIPPED
-        PUTS
 
 JUMP_TARGET
-        LEA R0, MSG_JUMPED
+        LD R0, PTR_MSG_JUMPED
         PUTS
         LD R0, NEWLINE
         OUT
@@ -66,56 +102,47 @@ JUMP_TARGET
 ; ------------------------------------------------------------
 ; PART 2: JSRR - Indirect Subroutine Call
 ; ------------------------------------------------------------
-; JSRR BaseR is like JSR, but the address is in a register.
-; This enables function pointers and callbacks!
-
-        LEA R0, MSG_PART2
+        LD R0, PTR_MSG_PART2
         PUTS
 
-        ; Call different subroutines using JSRR
         LEA R1, FUNC_HELLO
-        JSRR R1             ; Call FUNC_HELLO via R1
+        JSRR R1
         
         LEA R1, FUNC_GOODBYE
-        JSRR R1             ; Call FUNC_GOODBYE via R1
+        JSRR R1
         
         LD R0, NEWLINE
         OUT
 
 ; ------------------------------------------------------------
-; PART 3: Jump Table (Switch Statement)
+; PART 3: Jump Table Menu
 ; ------------------------------------------------------------
-; Use JSRR to implement a menu selection!
-
-        LEA R0, MSG_PART3
+        LD R0, PTR_MSG_PART3
         PUTS
-        LEA R0, MSG_MENU
+        LD R0, PTR_MSG_MENU
         PUTS
         
-        IN                  ; Read choice
+        IN
         LD R0, NEWLINE
         OUT
         
-        ; Convert ASCII digit to number (subtract '0')
-        ADD R1, R0, #0      ; R1 = input character
+        ADD R1, R0, #0
         LD R2, NEG_ASCII_0
-        ADD R1, R1, R2      ; R1 = choice number (0-3)
+        ADD R1, R1, R2      ; R1 = choice (0-3)
         
-        ; Bounds check
         BRn INVALID_CHOICE
-        ADD R2, R1, #-4     ; Check if >= 4
+        ADD R2, R1, #-4
         BRzp INVALID_CHOICE
         
-        ; Use jump table to call appropriate function
-        LEA R2, JUMP_TABLE  ; R2 = base of jump table
-        ADD R2, R2, R1      ; R2 = &JUMP_TABLE[choice]
-        LDR R2, R2, #0      ; R2 = JUMP_TABLE[choice] (function address)
-        JSRR R2             ; Call the function!
+        LEA R2, JUMP_TABLE
+        ADD R2, R2, R1
+        LDR R2, R2, #0
+        JSRR R2
         
         BRnzp MENU_DONE
 
 INVALID_CHOICE
-        LEA R0, MSG_INVALID
+        LD R0, PTR_MSG_INVALID
         PUTS
 
 MENU_DONE
@@ -123,28 +150,23 @@ MENU_DONE
         OUT
 
 ; ------------------------------------------------------------
-; PART 4: .BLKW - Block of Words
+; PART 4: .BLKW Buffer
 ; ------------------------------------------------------------
-; .BLKW n reserves n words of memory (uninitialized).
-; Perfect for arrays and buffers!
-
-        LEA R0, MSG_PART4
+        LD R0, PTR_MSG_PART4
         PUTS
 
-        ; Fill BUFFER with values 0, 1, 2, 3, 4
-        LEA R1, BUFFER      ; R1 = buffer pointer
-        AND R2, R2, #0      ; R2 = counter/value
+        LEA R1, BUFFER
+        AND R2, R2, #0
         LD R3, BUFFER_SIZE
 
 FILL_LOOP
-        STR R2, R1, #0      ; buffer[i] = i
-        ADD R1, R1, #1      ; pointer++
-        ADD R2, R2, #1      ; value++
+        STR R2, R1, #0
+        ADD R1, R1, #1
+        ADD R2, R2, #1
         ADD R3, R3, #-1
         BRp FILL_LOOP
         
-        ; Print the buffer
-        LEA R0, MSG_BUFFER
+        LD R0, PTR_MSG_BUFFER
         PUTS
         LEA R1, BUFFER
         LD R3, BUFFER_SIZE
@@ -164,47 +186,35 @@ PRINT_BUF
         OUT
 
 ; ============================================================
-; FINAL PROJECT: Interactive Calculator
+; FINAL PROJECT: Calculator
 ; ============================================================
-; A complete program combining everything we've learned:
-; - Input/Output
-; - Branching and loops
-; - Subroutines with register saving
-; - Arrays and memory
-; - Jump tables
-
-        LEA R0, MSG_FINAL
+        LD R0, PTR_MSG_FINAL
         PUTS
 
 CALC_LOOP
-        LEA R0, MSG_CALC_PROMPT
+        LD R0, PTR_MSG_PROMPT
         PUTS
         
-        ; Read first number (single digit)
         GETC
         OUT
-        ADD R1, R0, #0      ; Save first digit
+        ADD R1, R0, #0
         LD R2, NEG_ASCII_0
-        ADD R1, R1, R2      ; Convert to number
+        ADD R1, R1, R2      ; R1 = first number
         
-        ; Read operator
         GETC
         OUT
-        ADD R3, R0, #0      ; Save operator
+        ADD R3, R0, #0      ; R3 = operator
         
-        ; Read second number
         GETC
         OUT
-        ADD R2, R0, #0      ; Save second digit
+        ADD R2, R0, #0
         LD R4, NEG_ASCII_0
-        ADD R2, R2, R4      ; Convert to number
+        ADD R2, R2, R4      ; R2 = second number
         
         LD R0, NEWLINE
         OUT
         
-        ; Check operator and perform operation
-        ; R1 = first number, R2 = second number, R3 = operator
-        
+        ; Check operator
         LD R4, CHAR_PLUS
         NOT R4, R4
         ADD R4, R4, #1
@@ -229,12 +239,12 @@ CALC_LOOP
         ADD R4, R3, R4
         BRz CALC_QUIT
         
-        LEA R0, MSG_UNK_OP
+        LD R0, PTR_MSG_UNKOP
         PUTS
         BRnzp CALC_LOOP
 
 DO_ADD
-        ADD R5, R1, R2      ; R5 = result
+        ADD R5, R1, R2
         BRnzp SHOW_RESULT
         
 DO_SUB
@@ -244,7 +254,7 @@ DO_SUB
         BRnzp SHOW_RESULT
         
 DO_MULT
-        AND R5, R5, #0      ; R5 = 0 (accumulator)
+        AND R5, R5, #0
         ADD R2, R2, #0
         BRz SHOW_RESULT
 MUL_LP  ADD R5, R5, R1
@@ -253,11 +263,10 @@ MUL_LP  ADD R5, R5, R1
         BRnzp SHOW_RESULT
 
 SHOW_RESULT
-        LEA R0, MSG_EQUALS
+        LD R0, PTR_MSG_EQUALS
         PUTS
         ADD R2, R5, #0
         
-        ; Handle negative
         ADD R2, R2, #0
         BRzp PRINT_POS
         LD R0, CHAR_MINUS
@@ -272,9 +281,8 @@ PRINT_POS
         BRnzp CALC_LOOP
 
 CALC_QUIT
-        LEA R0, MSG_BYE
+        LD R0, PTR_MSG_BYE
         PUTS
-
         HALT
 
 ; ============================================================
@@ -282,36 +290,60 @@ CALC_QUIT
 ; ============================================================
 
 FUNC_HELLO
-        LEA R0, MSG_HELLO
+        ADD R6, R6, #-1
+        STR R7, R6, #0
+        LD R0, PTR_MSG_HELLO
         PUTS
+        LDR R7, R6, #0
+        ADD R6, R6, #1
         RET
 
 FUNC_GOODBYE
-        LEA R0, MSG_GOODBYE
+        ADD R6, R6, #-1
+        STR R7, R6, #0
+        LD R0, PTR_MSG_GOODBYE
         PUTS
+        LDR R7, R6, #0
+        ADD R6, R6, #1
         RET
 
 MENU_OPT0
-        LEA R0, MSG_OPT0
+        ADD R6, R6, #-1
+        STR R7, R6, #0
+        LD R0, PTR_MSG_OPT0
         PUTS
+        LDR R7, R6, #0
+        ADD R6, R6, #1
         RET
 
 MENU_OPT1
-        LEA R0, MSG_OPT1
+        ADD R6, R6, #-1
+        STR R7, R6, #0
+        LD R0, PTR_MSG_OPT1
         PUTS
+        LDR R7, R6, #0
+        ADD R6, R6, #1
         RET
 
 MENU_OPT2
-        LEA R0, MSG_OPT2
+        ADD R6, R6, #-1
+        STR R7, R6, #0
+        LD R0, PTR_MSG_OPT2
         PUTS
+        LDR R7, R6, #0
+        ADD R6, R6, #1
         RET
 
 MENU_OPT3
-        LEA R0, MSG_OPT3
+        ADD R6, R6, #-1
+        STR R7, R6, #0
+        LD R0, PTR_MSG_OPT3
         PUTS
+        LDR R7, R6, #0
+        ADD R6, R6, #1
         RET
 
-; Print number (handles negatives and 0-99)
+; PRINT_NUM: Print R2 (0-99)
 PRINT_NUM
         ADD R6, R6, #-1
         STR R7, R6, #0
@@ -320,7 +352,7 @@ PRINT_NUM
         ADD R6, R6, #-1
         STR R4, R6, #0
         
-        AND R3, R3, #0      ; tens
+        AND R3, R3, #0
 PN_T    ADD R4, R2, #-10
         BRn PN_O
         ADD R2, R4, #0
@@ -344,86 +376,73 @@ PN_S    LD R0, ASCII_0
         RET
 
 ; ============================================================
-; DATA
+; DATA SEGMENT
 ; ============================================================
-MSG_HEADER      .STRINGZ "=== Lesson 18: Final Project ===\\n\\n"
-MSG_PART1       .STRINGZ "Part 1 - JMP (indirect jump):\\n"
-MSG_PART2       .STRINGZ "Part 2 - JSRR (indirect call):\\n"
-MSG_PART3       .STRINGZ "Part 3 - Jump table menu:\\n"
-MSG_PART4       .STRINGZ "Part 4 - .BLKW buffer:\\n"
-MSG_FINAL       .STRINGZ "=== FINAL PROJECT: Calculator ===\\n"
 
-MSG_SKIPPED     .STRINGZ "This should NOT print!\\n"
+        .ORIG x4000
+MSG_HEADER      .STRINGZ "=== Lesson 18: Final Project ===\\n\\n"
+
+        .ORIG x4040
+MSG_PART1       .STRINGZ "Part 1 - JMP (indirect jump):\\n"
+
+        .ORIG x4070
+MSG_PART2       .STRINGZ "Part 2 - JSRR (indirect call):\\n"
+
+        .ORIG x40A0
+MSG_PART3       .STRINGZ "Part 3 - Jump table menu:\\n"
+
+        .ORIG x40D0
+MSG_PART4       .STRINGZ "Part 4 - .BLKW buffer:\\n"
+
+        .ORIG x4100
+MSG_FINAL       .STRINGZ "=== CALCULATOR ===\\n"
+
+        .ORIG x4140
 MSG_JUMPED      .STRINGZ "Successfully jumped!\\n"
+
+        .ORIG x4160
 MSG_HELLO       .STRINGZ "Hello from FUNC_HELLO!\\n"
+
+        .ORIG x4190
 MSG_GOODBYE     .STRINGZ "Goodbye from FUNC_GOODBYE!\\n"
 
+        .ORIG x41C0
 MSG_MENU        .STRINGZ "0=Info 1=Add 2=Mult 3=Exit: "
+
+        .ORIG x41F0
 MSG_OPT0        .STRINGZ "LC-3 Calculator v1.0\\n"
+
+        .ORIG x4210
 MSG_OPT1        .STRINGZ "Addition selected!\\n"
+
+        .ORIG x4230
 MSG_OPT2        .STRINGZ "Multiplication selected!\\n"
+
+        .ORIG x4250
 MSG_OPT3        .STRINGZ "Goodbye!\\n"
+
+        .ORIG x4270
 MSG_INVALID     .STRINGZ "Invalid choice!\\n"
 
-MSG_BUFFER      .STRINGZ "Buffer contents: "
+        .ORIG x4290
+MSG_BUFFER      .STRINGZ "Buffer: "
 
-MSG_CALC_PROMPT .STRINGZ "Enter (digit op digit) or 'q' to quit: "
+        .ORIG x42B0
+MSG_PROMPT      .STRINGZ "Enter (d op d) or 'q': "
+
+        .ORIG x42F0
 MSG_EQUALS      .STRINGZ "= "
-MSG_UNK_OP      .STRINGZ "Unknown operator! Use + - *\\n"
-MSG_BYE         .STRINGZ "\\nThank you for using LC-3 Calculator!\\n"
 
-; Jump table for menu
-JUMP_TABLE      .FILL MENU_OPT0
-                .FILL MENU_OPT1
-                .FILL MENU_OPT2
-                .FILL MENU_OPT3
+        .ORIG x4300
+MSG_UNKOP       .STRINGZ "Use + - *\\n"
 
-; Buffer allocated with .BLKW
-BUFFER          .BLKW #5        ; 5 uninitialized words
-BUFFER_SIZE     .FILL #5
-
-STACK_BASE      .FILL xFE00
-NEG_ASCII_0     .FILL xFFD0     ; -48
-ASCII_0         .FILL x30
-NEWLINE         .FILL x0A
-SPACE           .FILL x20
-CHAR_PLUS       .FILL x2B       ; '+'
-CHAR_MINUS      .FILL x2D       ; '-'
-CHAR_STAR       .FILL x2A       ; '*'
-CHAR_Q          .FILL x71       ; 'q'
+        .ORIG x4330
+MSG_BYE         .STRINGZ "\\nThank you!\\n"
 
         .END
 
 ; ============================================================
-; CONGRATULATIONS!
-; ============================================================
-; You've completed the LC-3 Assembly course! You now know:
-;
-; INSTRUCTIONS:
-;   Arithmetic: ADD, AND, NOT
-;   Memory:     LD, LDI, LDR, LEA, ST, STI, STR
-;   Control:    BR (all variants), JMP, JSR, JSRR, RET
-;   I/O:        GETC, OUT, PUTS, IN, HALT
-;
-; DIRECTIVES:
-;   .ORIG, .END, .FILL, .STRINGZ, .BLKW
-;
-; CONCEPTS:
-;   - Registers and condition codes
-;   - Memory addressing modes
-;   - Branching and loops
-;   - Subroutines and the stack
-;   - Register saving conventions
-;   - Arrays and data structures
-;
-; WHAT'S NEXT?
-;   - Try writing more complex programs
-;   - Implement sorting algorithms
-;   - Create a simple game
-;   - Study how the LC-3 OS works
-;   - Learn about interrupts and privilege modes
-;
-; Happy coding!
+; CONGRATULATIONS! You've completed the LC-3 course!
 ; ============================================================
 `,
 };

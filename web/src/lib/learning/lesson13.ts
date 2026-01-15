@@ -173,6 +173,7 @@ PRINT_TENS
 ; Modifies: R0, R1
 ; ------------------------------------------------------------
 PRINT_N_TIMES
+        ST R7, PNT_SAVE_R7  ; Save R7 (traps clobber it!)
         ADD R1, R1, #0      ; Set condition codes
         BRz PNT_DONE        ; If count is 0, nothing to do
 
@@ -182,7 +183,10 @@ PNT_LOOP
         BRp PNT_LOOP        ; while count > 0
 
 PNT_DONE
+        LD R7, PNT_SAVE_R7  ; Restore R7
         RET
+
+PNT_SAVE_R7 .BLKW 1
 
 ; ------------------------------------------------------------
 ; MULTIPLY

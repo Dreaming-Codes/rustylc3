@@ -88,8 +88,8 @@ const lesson: LearningExample = {
 ; Modifies: R0, R1
 ; ------------------------------------------------------------
 PRINT_STARS
-        ; Save our work registers
-        ; (We'll learn proper saving in a later lesson)
+        ; Save R7 (IMPORTANT: traps clobber R7!)
+        ST R7, PS_SAVE_R7
         
         LD R1, STAR_COUNT   ; R1 = 10 (counter)
         LD R0, CHAR_STAR    ; R0 = '*'
@@ -102,7 +102,10 @@ PS_LOOP
         LD R0, NEWLINE
         OUT                 ; Print newline
 
+        LD R7, PS_SAVE_R7   ; Restore R7
         RET                 ; Return to caller!
+
+PS_SAVE_R7  .BLKW 1
 
 ; ------------------------------------------------------------
 ; PRINT_GREETING: Print a friendly greeting
@@ -111,9 +114,13 @@ PS_LOOP
 ; Modifies: R0
 ; ------------------------------------------------------------
 PRINT_GREETING
+        ST R7, PG_SAVE_R7
         LEA R0, GREETING_MSG
         PUTS
+        LD R7, PG_SAVE_R7
         RET
+
+PG_SAVE_R7  .BLKW 1
 
 ; ------------------------------------------------------------
 ; PRINT_HORIZONTAL_LINE: Print "+--------+"
@@ -122,6 +129,8 @@ PRINT_GREETING
 ; Modifies: R0, R1
 ; ------------------------------------------------------------
 PRINT_HORIZONTAL_LINE
+        ST R7, PHL_SAVE_R7
+        
         LD R0, CHAR_PLUS
         OUT                     ; Print '+'
         
@@ -138,7 +147,10 @@ PHL_LOOP
         LD R0, NEWLINE
         OUT
         
+        LD R7, PHL_SAVE_R7
         RET
+
+PHL_SAVE_R7 .BLKW 1
 
 ; ------------------------------------------------------------
 ; PRINT_BOX_MIDDLE: Print "|        |"
@@ -147,6 +159,8 @@ PHL_LOOP
 ; Modifies: R0, R1
 ; ------------------------------------------------------------
 PRINT_BOX_MIDDLE
+        ST R7, PBM_SAVE_R7
+        
         LD R0, CHAR_PIPE
         OUT                     ; Print '|'
         
@@ -163,7 +177,10 @@ PBM_LOOP
         LD R0, NEWLINE
         OUT
         
+        LD R7, PBM_SAVE_R7
         RET
+
+PBM_SAVE_R7 .BLKW 1
 
 ; ============================================================
 ; DATA
@@ -198,15 +215,19 @@ SPACE_COUNT .FILL #8
 ;    - Jumps to address stored in R7
 ;    - Equivalent to: JMP R7
 ;
-; 3. R7 IS SPECIAL!
+; 3. R7 IS SPECIAL - AND FRAGILE!
 ;    - JSR automatically stores return address in R7
-;    - If you call another subroutine, R7 gets overwritten!
-;    - We'll learn to save R7 in the next lessons
+;    - TRAP instructions (OUT, PUTS, etc.) ALSO overwrite R7!
+;    - Solution: Save R7 to memory before calling traps
+;    - We use ST R7, SAVE_R7 at start, LD R7, SAVE_R7 before RET
 ;
-; 4. SUBROUTINE STRUCTURE:
+; 4. SUBROUTINE STRUCTURE (with R7 saving):
 ;    SUBR_NAME
-;        (do work)
+;        ST R7, SAVE_R7      ; Save return address
+;        (do work, including traps)
+;        LD R7, SAVE_R7      ; Restore return address
 ;        RET
+;    SAVE_R7 .BLKW 1         ; Storage for R7
 ;
 ; 5. CALLING CONVENTION (informal):
 ;    - Document what the subroutine does
@@ -214,17 +235,14 @@ SPACE_COUNT .FILL #8
 ;    - Document outputs (which registers)
 ;    - Document which registers are modified
 ;
-; IMPORTANT WARNING:
-;    If subroutine A calls subroutine B, A's return address
-;    (in R7) will be LOST when B is called! We'll fix this
-;    in the stack lesson.
+; NOTE: This ST/LD approach works for simple subroutines.
+; For nested calls (subroutine calling subroutine), we need
+; the STACK - covered in Lesson 16!
 ;
 ; PRACTICE:
 ; - Create a subroutine that prints your name
 ; - Create a subroutine that prints any character N times
 ;   (pass character in R0, count in R1)
-; - What happens if you call JSR inside a subroutine without
-;   saving R7 first? Try it!
 ; ============================================================
 `,
 };

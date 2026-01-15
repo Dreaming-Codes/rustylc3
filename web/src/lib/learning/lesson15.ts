@@ -20,80 +20,93 @@ const lesson: LearningExample = {
 ; in MEMORY, not in a register. This is INDIRECT addressing.
 ;
 ;   LDI DR, LABEL - DR = mem[mem[LABEL]]
-;                   First reads the address from LABEL,
-;                   then reads the value at that address.
-;
 ;   STI SR, LABEL - mem[mem[LABEL]] = SR
-;                   First reads the address from LABEL,
-;                   then stores SR at that address.
 ;
 ; Think of it as: LABEL holds a POINTER to the actual data.
 ; ============================================================
 
         .ORIG x3000
 
+        BRnzp START         ; Skip over data section
+
+; ============================================================
+; POINTERS & CONSTANTS
+; ============================================================
+PTR_MSG_HEADER  .FILL x4000
+PTR_MSG_EX1     .FILL x4030
+PTR_MSG_EX2     .FILL x4060
+PTR_MSG_EX3     .FILL x4090
+PTR_MSG_EX4     .FILL x40C0
+PTR_MSG_LDI     .FILL x40E0
+PTR_MSG_BEFORE  .FILL x4100
+PTR_MSG_AFTER   .FILL x4120
+PTR_MSG_CURRENT .FILL x4140
+PTR_MSG_CHANGED .FILL x4170
+PTR_MSG_ENDLIST .FILL x41A0
+
+; Data pointers
+PTR_TO_DATA     .FILL x4200     ; -> ACTUAL_DATA
+PTR_TO_TARGET   .FILL x4202     ; -> TARGET_DATA
+PTR_SELECTOR    .FILL x4206     ; Current selector
+PTR_OPTION_B    .FILL x4205     ; Address of OPTION_B
+PTR_SELECTOR_LOC .FILL x4206    ; Address of SELECTOR
+PTR_NODE1       .FILL x4210     ; Linked list start
+
+; Constants
+STACK_BASE      .FILL xFE00
+ASCII_0         .FILL x30
+NEWLINE         .FILL x0A
+ARROW           .FILL x2D       ; '-'
+NEW_VALUE       .FILL #99
+
 ; ============================================================
 ; MAIN PROGRAM
 ; ============================================================
 
-        LEA R0, MSG_HEADER
+START
+        LD R6, STACK_BASE
+        LD R0, PTR_MSG_HEADER
         PUTS
 
 ; ------------------------------------------------------------
-; EXAMPLE 1: Basic LDI - Loading Through a Pointer
+; EXAMPLE 1: Basic LDI
 ; ------------------------------------------------------------
-; ACTUAL_DATA contains our value (42).
-; PTR_TO_DATA contains the ADDRESS of ACTUAL_DATA.
-; LDI reads the address from PTR_TO_DATA, then reads from there.
-
-        LEA R0, MSG_EX1
+        LD R0, PTR_MSG_EX1
         PUTS
 
-        ; Using regular LD, we'd load the POINTER itself
-        LD R1, PTR_TO_DATA  ; R1 = address of ACTUAL_DATA (not 42!)
+        ; LDI loads THROUGH the pointer
+        LDI R2, PTR_TO_DATA     ; R2 = 42
         
-        ; Using LDI, we load THROUGH the pointer
-        LDI R2, PTR_TO_DATA ; R2 = mem[mem[PTR_TO_DATA]] = 42!
-        
-        LEA R0, MSG_LD
+        LD R0, PTR_MSG_LDI
         PUTS
-        ; Print R1 (the address, in hex would be around x30xx)
-        ; For demo, just show it's different from 42
-        
-        LEA R0, MSG_LDI
-        PUTS
-        ; Print R2 (should be 42)
-        ADD R2, R2, #0      ; Move to R2 for print
-        JSR PRINT_NUM       ; Print 42
+        JSR PRINT_NUM
         LD R0, NEWLINE
         OUT
         LD R0, NEWLINE
         OUT
 
 ; ------------------------------------------------------------
-; EXAMPLE 2: Basic STI - Storing Through a Pointer
+; EXAMPLE 2: Basic STI
 ; ------------------------------------------------------------
-; Let's modify data at a location pointed to by another location.
-
-        LEA R0, MSG_EX2
+        LD R0, PTR_MSG_EX2
         PUTS
         
         ; Load original value
-        LDI R1, PTR_TO_TARGET   ; R1 = current value at target
-        LEA R0, MSG_BEFORE
+        LDI R1, PTR_TO_TARGET
+        LD R0, PTR_MSG_BEFORE
         PUTS
         ADD R2, R1, #0
         JSR PRINT_NUM
         LD R0, NEWLINE
         OUT
         
-        ; Store new value (99) through the pointer
-        LD R1, NEW_VALUE        ; R1 = 99
-        STI R1, PTR_TO_TARGET   ; mem[mem[PTR_TO_TARGET]] = 99
+        ; Store new value through pointer
+        LD R1, NEW_VALUE
+        STI R1, PTR_TO_TARGET
         
-        ; Verify it changed
-        LDI R1, PTR_TO_TARGET   ; Load it back
-        LEA R0, MSG_AFTER
+        ; Verify change
+        LDI R1, PTR_TO_TARGET
+        LD R0, PTR_MSG_AFTER
         PUTS
         ADD R2, R1, #0
         JSR PRINT_NUM
@@ -103,16 +116,17 @@ const lesson: LearningExample = {
         OUT
 
 ; ------------------------------------------------------------
-; EXAMPLE 3: Changing Which Data We Access
+; EXAMPLE 3: Changing Pointers
 ; ------------------------------------------------------------
-; By changing the pointer, we can access different data!
-
-        LEA R0, MSG_EX3
+        LD R0, PTR_MSG_EX3
         PUTS
         
-        ; Initially SELECTOR points to OPTION_A
-        LDI R1, SELECTOR
-        LEA R0, MSG_CURRENT
+        ; Initially SELECTOR points to OPTION_A (11)
+        ; LDI gives us the address stored in SELECTOR
+        ; Then we use LDR to get the actual value
+        LDI R1, PTR_SELECTOR    ; R1 = address of OPTION_A
+        LDR R1, R1, #0          ; R1 = value at OPTION_A = 11
+        LD R0, PTR_MSG_CURRENT
         PUTS
         ADD R2, R1, #0
         JSR PRINT_NUM
@@ -120,12 +134,13 @@ const lesson: LearningExample = {
         OUT
         
         ; Change SELECTOR to point to OPTION_B
-        LEA R1, OPTION_B        ; R1 = address of OPTION_B
-        ST R1, SELECTOR         ; SELECTOR now points to OPTION_B
+        LD R1, PTR_OPTION_B
+        STI R1, PTR_SELECTOR_LOC
         
-        ; Now LDI gives us OPTION_B's value!
-        LDI R1, SELECTOR
-        LEA R0, MSG_CHANGED
+        ; Now SELECTOR contains address of OPTION_B
+        LDI R1, PTR_SELECTOR    ; R1 = address of OPTION_B  
+        LDR R1, R1, #0          ; R1 = value at OPTION_B = 22
+        LD R0, PTR_MSG_CHANGED
         PUTS
         ADD R2, R1, #0
         JSR PRINT_NUM
@@ -135,26 +150,19 @@ const lesson: LearningExample = {
         OUT
 
 ; ------------------------------------------------------------
-; EXAMPLE 4: Simple Linked Structure
+; EXAMPLE 4: Linked List
 ; ------------------------------------------------------------
-; A very simple linked list! Each node has:
-;   - A value
-;   - A pointer to the next node (or 0 for end)
-
-        LEA R0, MSG_EX4
+        LD R0, PTR_MSG_EX4
         PUTS
         
-        LEA R3, NODE1       ; R3 = current node pointer
+        LD R3, PTR_NODE1        ; R3 = first node address
 
 TRAVERSE_LOOP
-        ; Load value from current node (offset 0)
-        LDR R2, R3, #0      ; R2 = node->value
+        LDR R2, R3, #0          ; value
         JSR PRINT_NUM
         
-        ; Load pointer to next node (offset 1)
-        LDR R3, R3, #1      ; R3 = node->next
+        LDR R3, R3, #1          ; next pointer
         
-        ; Check if next is null (0)
         ADD R3, R3, #0
         BRz TRAVERSE_DONE
         
@@ -165,7 +173,7 @@ TRAVERSE_LOOP
         BRnzp TRAVERSE_LOOP
 
 TRAVERSE_DONE
-        LEA R0, MSG_END_LIST
+        LD R0, PTR_MSG_ENDLIST
         PUTS
 
         HALT
@@ -174,71 +182,95 @@ TRAVERSE_DONE
 ; SUBROUTINES
 ; ============================================================
 
-; Print number in R2 (handles 0-99)
 PRINT_NUM
-        ; Handle tens
-        AND R3, R3, #0      ; tens counter
+        ADD R6, R6, #-1
+        STR R7, R6, #0
+        ADD R6, R6, #-1
+        STR R3, R6, #0
+        ADD R6, R6, #-1
+        STR R4, R6, #0
+        
+        AND R3, R3, #0
 PN_TENS
         ADD R4, R2, #-10
         BRn PN_ONES
-        ADD R2, R4, #0      ; R2 -= 10
-        ADD R3, R3, #1      ; tens++
+        ADD R2, R4, #0
+        ADD R3, R3, #1
         BRnzp PN_TENS
 PN_ONES
-        ; Print tens if non-zero
         ADD R3, R3, #0
-        BRz PN_SKIP_TENS
+        BRz PN_SKIP
         LD R0, ASCII_0
         ADD R0, R3, R0
         OUT
-PN_SKIP_TENS
-        ; Print ones
+PN_SKIP
         LD R0, ASCII_0
         ADD R0, R2, R0
         OUT
+        
+        LDR R4, R6, #0
+        ADD R6, R6, #1
+        LDR R3, R6, #0
+        ADD R6, R6, #1
+        LDR R7, R6, #0
+        ADD R6, R6, #1
         RET
 
 ; ============================================================
-; DATA
+; DATA SEGMENT
 ; ============================================================
+
+        .ORIG x4000
 MSG_HEADER  .STRINGZ "=== Indirect Addressing ===\\n\\n"
+
+        .ORIG x4030
 MSG_EX1     .STRINGZ "Example 1 - LDI basics:\\n"
+
+        .ORIG x4060
 MSG_EX2     .STRINGZ "Example 2 - STI basics:\\n"
-MSG_EX3     .STRINGZ "Example 3 - Changing pointers:\\n"
+
+        .ORIG x4090
+MSG_EX3     .STRINGZ "Example 3 - Pointer redirect:\\n"
+
+        .ORIG x40C0
 MSG_EX4     .STRINGZ "Example 4 - Linked list: "
 
-MSG_LD      .STRINGZ "LD loads the address (pointer)\\n"
-MSG_LDI     .STRINGZ "LDI loads the VALUE at that address: "
+        .ORIG x40E0
+MSG_LDI     .STRINGZ "LDI loaded value: "
+
+        .ORIG x4100
 MSG_BEFORE  .STRINGZ "Before STI: "
+
+        .ORIG x4120
 MSG_AFTER   .STRINGZ "After STI:  "
-MSG_CURRENT .STRINGZ "Via selector (Option A): "
-MSG_CHANGED .STRINGZ "Via selector (Option B): "
-MSG_END_LIST .STRINGZ " -> END\\n"
 
-; Pointer example data
-ACTUAL_DATA     .FILL #42
-PTR_TO_DATA     .FILL ACTUAL_DATA   ; Points to ACTUAL_DATA
+        .ORIG x4140
+MSG_CURRENT .STRINGZ "Option A value: "
 
-TARGET_DATA     .FILL #10           ; Will be changed
-PTR_TO_TARGET   .FILL TARGET_DATA   ; Points to TARGET_DATA
-NEW_VALUE       .FILL #99
+        .ORIG x4170
+MSG_CHANGED .STRINGZ "Option B value: "
 
-; Selector example
-OPTION_A        .FILL #11
-OPTION_B        .FILL #22
-SELECTOR        .FILL OPTION_A      ; Currently points to OPTION_A
+        .ORIG x41A0
+MSG_ENDLIST .STRINGZ " -> END\\n"
 
-; Linked list: value, next_pointer
-NODE1           .FILL #1            ; value
-                .FILL NODE2         ; next -> NODE2
-NODE2           .FILL #2            ; value
-                .FILL NODE3         ; next -> NODE3
-NODE3           .FILL #3            ; value
-                .FILL #0            ; next -> NULL (end of list)
+; Data section
+        .ORIG x4200
+ACTUAL_DATA     .FILL #42       ; x4200
+PTR_DATA_ADDR   .FILL x4200     ; x4201
+TARGET_DATA     .FILL #10       ; x4202
+PTR_TARGET_ADDR .FILL x4202     ; x4203
+OPTION_A        .FILL #11       ; x4204
+OPTION_B        .FILL #22       ; x4205
+SELECTOR        .FILL x4204     ; x4206 -> OPTION_A
 
-ASCII_0         .FILL x30
-NEWLINE         .FILL x0A
-ARROW           .FILL x2D           ; '-'
+; Linked list
+        .ORIG x4210
+NODE1           .FILL #1        ; x4210: value
+                .FILL x4212     ; x4211: next
+NODE2           .FILL #2        ; x4212: value
+                .FILL x4214     ; x4213: next
+NODE3           .FILL #3        ; x4214: value
+                .FILL #0        ; x4215: NULL
 
         .END
 
@@ -246,35 +278,13 @@ ARROW           .FILL x2D           ; '-'
 ; KEY CONCEPTS
 ; ============================================================
 ;
-; 1. LDI DR, LABEL (Load Indirect)
-;    - LABEL contains an ADDRESS (pointer)
-;    - LDI reads that address, then reads from THAT location
-;    - DR = mem[mem[LABEL]]
+; LDI DR, LABEL: DR = mem[mem[LABEL]]
+; STI SR, LABEL: mem[mem[LABEL]] = SR
 ;
-; 2. STI SR, LABEL (Store Indirect)
-;    - LABEL contains an ADDRESS (pointer)
-;    - STI reads that address, then stores to THAT location
-;    - mem[mem[LABEL]] = SR
-;
-; 3. COMPARISON:
-;    LD  R0, X   ; R0 = mem[X] (direct)
-;    LDI R0, X   ; R0 = mem[mem[X]] (indirect)
-;    LDR R0,R1,0 ; R0 = mem[R1+0] (base+offset)
-;
-; 4. USE CASES:
-;    - Accessing data through pointers in memory
-;    - Implementing dynamic data structures
-;    - Accessing memory-mapped I/O
-;    - When the actual address is computed/stored elsewhere
-;
-; 5. LINKED STRUCTURES:
-;    Each node stores data AND a pointer to the next node.
-;    Traverse by following the pointers until NULL (0).
-;
-; PRACTICE:
-; - Add more nodes to the linked list
-; - Create a function that counts linked list length
-; - Implement a doubly-linked list (prev and next pointers)
+; Use cases:
+; - Accessing data through memory pointers
+; - Dynamic data structures
+; - Indirection for flexibility
 ; ============================================================
 `,
 };
