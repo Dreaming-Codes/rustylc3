@@ -494,7 +494,6 @@ export function provideInput(char: string) {
   lc3Store.setState((s) => ({
     ...s,
     waitingForInput: false,
-    consoleOutput: s.consoleOutput + char,
   }))
 
   // Resume if was running (including instant mode)
