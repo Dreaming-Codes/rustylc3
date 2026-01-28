@@ -38,8 +38,12 @@ export function ConsolePanel() {
         provideInput(e.key)
         setInputBuffer('')
         e.preventDefault()
-      } else if (e.key === 'Enter' && waitingForInput && inputBuffer.length > 0) {
-        provideInput(inputBuffer[0])
+      } else if (e.key === 'Enter' && waitingForInput) {
+        if (inputBuffer.length > 0) {
+          provideInput(inputBuffer[0])
+        } else {
+          provideInput('\n')
+        }
         setInputBuffer('')
         e.preventDefault()
       }
